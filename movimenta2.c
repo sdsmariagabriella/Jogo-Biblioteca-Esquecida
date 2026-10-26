@@ -77,6 +77,14 @@ int main(void){
             }
         }
 
+        if (evento.keyboard.keycode == ALLEGRO_KEY_UP) {
+            y - velo;
+        }
+
+       
+           
+
+
         // A cada "tick" do timer (60 vezes por segundo)
         if (evento.type == ALLEGRO_EVENT_TIMER) {
             ALLEGRO_KEYBOARD_STATE key_state;
@@ -96,6 +104,10 @@ int main(void){
                     x = largura_tela - tamanho; // Trava na borda direita
                 }
             }
+
+           
+      
+
             // Limpar a tela
             al_clear_to_color(al_map_rgb(0, 0, 0));
 
@@ -105,6 +117,8 @@ int main(void){
                 x + tamanho, y + tamanho,
                 al_map_rgb(200, 200, 0)
             );
+
+            
 
             // Atualizar a tela
             al_flip_display();
