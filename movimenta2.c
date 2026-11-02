@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdbool.h>
-
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
 
@@ -77,14 +76,6 @@ int main(void){
             }
         }
 
-        if (evento.keyboard.keycode == ALLEGRO_KEY_UP) {
-            y - velo;
-        }
-
-       
-           
-
-
         // A cada "tick" do timer (60 vezes por segundo)
         if (evento.type == ALLEGRO_EVENT_TIMER) {
             ALLEGRO_KEYBOARD_STATE key_state;
@@ -94,19 +85,30 @@ int main(void){
             if (al_key_down(&key_state, ALLEGRO_KEY_LEFT)){
                 x -= velo;
                 if (x < 0) {
-                    x = 0; // Trava na borda esquerda
+                    x = 0;
                 }
             }
             // Movimento para a DIREITA com limite
             if (al_key_down(&key_state, ALLEGRO_KEY_RIGHT)){
                 x += velo;
                 if (x + tamanho > largura_tela) {
-                    x = largura_tela - tamanho; // Trava na borda direita
+                    x = largura_tela - tamanho;
                 }
             }
-
-           
-      
+            // Movimento para CIMA com limite
+            if (al_key_down(&key_state, ALLEGRO_KEY_UP)){
+                y -= velo;
+                if (y < 0) {
+                    y = 0;
+                }
+            }
+            // Movimento para BAIXO com limite
+            if (al_key_down(&key_state, ALLEGRO_KEY_DOWN)){
+                y += velo;
+                if (y + tamanho > altura_tela) {
+                    y = altura_tela - tamanho;
+                }
+            }
 
             // Limpar a tela
             al_clear_to_color(al_map_rgb(0, 0, 0));
@@ -117,8 +119,6 @@ int main(void){
                 x + tamanho, y + tamanho,
                 al_map_rgb(200, 200, 0)
             );
-
-            
 
             // Atualizar a tela
             al_flip_display();
