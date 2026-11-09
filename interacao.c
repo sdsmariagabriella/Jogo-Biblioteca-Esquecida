@@ -3,6 +3,7 @@
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_font.h>
+#include <allegro5/allegro_image.h>
 
 int main(void){
     if(!al_init()){
@@ -17,6 +18,12 @@ int main(void){
         printf("Erro nas primitivas!\n");
         return 1;
     }
+    // iniciar a imagem da sala 1
+    if(!al_init_image_addon()){
+        printf("Erro a iniciar o addon de imagns\n");
+        return 1;
+    }
+
     if(!al_init_font_addon()){
         printf("Erro ao iniciar o addon de fontes!\n");
         return 1;
@@ -30,6 +37,14 @@ int main(void){
         return 1;
     }
     al_set_window_title(janela, "Jogo de teste - Salas e Quiz");
+
+    //Carregar a imagem da sala 1
+    ALLEGRO_BITMAP *imagem_sala1 = al_load_bitmap("img/biblioteca2.png");
+    if (!imagem_sala1){
+        printf("Erro ao carregar a imagem da sala 1!\n");
+        al_destroy_display(janela);
+        return 1;
+    }
 
     ALLEGRO_FONT *fonte = al_create_builtin_font();
     if (!fonte) {
@@ -163,7 +178,17 @@ int main(void){
 
             // Fundo
             if (sala_atual == 1){
-                al_clear_to_color(al_map_rgb(0, 0, 0));
+                //al_clear_to_color(al_map_rgb(0, 0, 0));
+                  al_draw_scaled_bitmap(
+                    imagem_sala1,
+                    0, 0,
+                    al_get_bitmap_width(imagem_sala1),
+                    al_get_bitmap_height(imagem_sala1),
+                    0, 0,
+                    largura_tela,
+                    altura_tela,
+                    0
+                );
             } else {
                 al_clear_to_color(al_map_rgb(20, 60, 40));
             }
@@ -232,6 +257,7 @@ int main(void){
     }
 
     al_destroy_font(fonte);
+    al_destroy_bitmap(imagem_sala1);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
     al_destroy_display(janela);
