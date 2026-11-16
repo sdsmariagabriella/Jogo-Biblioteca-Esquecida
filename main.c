@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
@@ -149,15 +150,16 @@ int main(void)
     // ---------------- QUIZ ----------------
 
     bool quiz_aberto = false;
+    char resposta[100];
 
     int opcao_selecionada = 0;
     int opcao_respondida = -1;
 
     const char *alternativas[4] = {
-        "A) Alternativa 1",
-        "B) Alternativa 2",
-        "C) Alternativa 3",
-        "D) Alternativa 4"
+        "A) Cavalo de Troia",
+        "B) Guerra dos Cem Anos",
+        "C) Muralha de Tróia",
+        "D) Mitologia Romana"
     };
 
     al_start_timer(timer);
@@ -207,10 +209,10 @@ int main(void)
                             (opcao_selecionada + 1) % 4;
                     }
 
-                    else if (tecla == ALLEGRO_KEY_ENTER) {
+                    else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1) {
                         opcao_respondida = opcao_selecionada;
 
-                        if (opcao_respondida == 1){
+                        if (opcao_respondida == 0){
                         printf("Resposta correta!\n");
                         }else{
                             vidas--;
@@ -521,13 +523,19 @@ int main(void)
                     sala_atual
                 );
 
-                al_draw_textf(
-                    fonte, 
-                    al_map_rgb(255,0,0),
-                    10,30,
-                    0,
-                    "Vidas: %d", vidas
-                );
+                for (int i = 0; i < vidas; i++){
+                    float x = 700 + (i * 25);
+                    float y = 15;
+
+                    ALLEGRO_COLOR vermelho = al_map_rgb(255,0,0);
+
+                    //parte do coração de cima
+                    al_draw_filled_circle(x + 6, y + 6 , 6, vermelho );
+                    al_draw_filled_circle(x + 15, y + 6, 6, vermelho);
+
+                    //parte de baixo
+                    al_draw_filled_triangle(x, y + 8,x + 21, y + 8,x + 10.5, y + 21,vermelho);
+                }
 
                 // ---------------- TELA DO QUIZ ----------------
 
@@ -574,7 +582,7 @@ int main(void)
                         (jx1 + jx2) / 2,
                         jy1 + 60,
                         ALLEGRO_ALIGN_CENTRE,
-                        "Pergunta de teste?"
+                        "Qual foi a estrategia usada para invadir Troia?"
                     );
 
                     // Alternativas
