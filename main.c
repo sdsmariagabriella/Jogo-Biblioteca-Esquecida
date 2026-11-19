@@ -65,6 +65,18 @@ int main(void)
         return 1;
     }
 
+    //sala 2
+    ALLEGRO_BITMAP * imagem_sala2 =
+        al_load_bitmap("img/abandonada2.png");
+
+    if (!imagem_sala2){
+        printf("Erro ao carregar a iamgem da sala 2\n ");
+        al_destroy_bitmap(imagem_sala1);
+        al_destroy_display(janela);
+        return 1;
+    }
+
+
     // Cria a fonte
     ALLEGRO_FONT *fonte = al_create_builtin_font();
 
@@ -475,9 +487,16 @@ int main(void)
                 }
 
                 else {
-                    al_clear_to_color(
-                        al_map_rgb(20, 60, 40)
-                    );
+                     al_draw_scaled_bitmap(
+                        imagem_sala2,
+                        0, 0,
+                        al_get_bitmap_width(imagem_sala2),
+                        al_get_bitmap_height(imagem_sala2),
+                        0, 0,
+                        largura_tela,
+                        altura_tela,
+                        0
+                        );
                 }
 
                 // Desenha a zona de interacao
@@ -649,6 +668,7 @@ int main(void)
     // ---------------- LIBERAR MEMORIA ----------------
 
     al_destroy_font(fonte);
+    al_destroy_bitmap(imagem_sala2);
     al_destroy_bitmap(imagem_sala1);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
