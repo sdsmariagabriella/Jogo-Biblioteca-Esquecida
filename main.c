@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -7,6 +6,13 @@
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_image.h>
+
+typedef enum {
+    ESTADO_MENU,
+    ESTADO_HISTORIA,
+    ESTADO_JOGANDO,
+    game_over
+} EstadoJogo;
 
 int main(void)
 {
@@ -57,7 +63,7 @@ int main(void)
 
     // Carrega a imagem da sala 1
     ALLEGRO_BITMAP *imagem_sala1 =
-        al_load_bitmap("img/abandonada.png");
+        al_load_bitmap("img/bibliotecaDestruida2.png");
 
     if (!imagem_sala1) {
         printf("Erro ao carregar a imagem da sala 1!\n");
@@ -65,23 +71,23 @@ int main(void)
         return 1;
     }
 
-    //sala 2
-    ALLEGRO_BITMAP * imagem_sala2 =
-        al_load_bitmap("img/abandonada2.png");
+    // Carrega a imagem da sala 2
+    ALLEGRO_BITMAP *imagem_sala2 =
+        al_load_bitmap("img/bibliotecaDestruida1.png");
 
-    if (!imagem_sala2){
-        printf("Erro ao carregar a iamgem da sala 2\n ");
+    if (!imagem_sala2) {
+        printf("Erro ao carregar a imagem da sala 2!\n");
         al_destroy_bitmap(imagem_sala1);
         al_destroy_display(janela);
         return 1;
     }
-
 
     // Cria a fonte
     ALLEGRO_FONT *fonte = al_create_builtin_font();
 
     if (!fonte) {
         printf("Erro ao criar a fonte!\n");
+        al_destroy_bitmap(imagem_sala2);
         al_destroy_bitmap(imagem_sala1);
         al_destroy_display(janela);
         return 1;
@@ -93,6 +99,7 @@ int main(void)
     if (!timer) {
         printf("Erro ao criar o timer!\n");
         al_destroy_font(fonte);
+        al_destroy_bitmap(imagem_sala2);
         al_destroy_bitmap(imagem_sala1);
         al_destroy_display(janela);
         return 1;
@@ -105,6 +112,7 @@ int main(void)
         printf("Erro ao criar a fila de eventos!\n");
         al_destroy_timer(timer);
         al_destroy_font(fonte);
+        al_destroy_bitmap(imagem_sala2);
         al_destroy_bitmap(imagem_sala1);
         al_destroy_display(janela);
         return 1;
@@ -128,9 +136,6 @@ int main(void)
     );
 
     // ---------------- TELA INICIAL ----------------
-
-    bool jogo_iniciado = false;
-    bool rodando = true;
 
     // Posicao do botao iniciar
     float botao_x1 = 280;
@@ -162,7 +167,6 @@ int main(void)
     // ---------------- QUIZ ----------------
 
     bool quiz_aberto = false;
-    char resposta[100];
 
     int opcao_selecionada = 0;
     int opcao_respondida = -1;
@@ -170,9 +174,14 @@ int main(void)
     const char *alternativas[4] = {
         "A) Cavalo de Troia",
         "B) Guerra dos Cem Anos",
-        "C) Muralha de Tróia",
+        "C) Muralha de Troia",
         "D) Mitologia Romana"
     };
+
+    // ---------------- ESTADOS DO JOGO ----------------
+
+    EstadoJogo estado_atual = ESTADO_MENU;
+    bool rodando = true;
 
     al_start_timer(timer);
 
@@ -195,16 +204,47 @@ int main(void)
             int tecla = evento.keyboard.keycode;
 
             // Na tela inicial
-            if (!jogo_iniciado) {
+            if (estado_atual == ESTADO_MENU) {
 
                 if (tecla == ALLEGRO_KEY_ENTER) {
-                    jogo_iniciado = true;
+                    estado_atual = ESTADO_HISTORIA;
                 }
 
                 if (tecla == ALLEGRO_KEY_ESCAPE) {
                     rodando = false;
                 }
             }
+
+            // Na tela da historia
+            else if (estado_atual == ESTADO_HISTORIA) {
+
+                if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_SPACE) {
+                    estado_atual = ESTADO_JOGANDO;
+                }
+
+                if (tecla == ALLEGRO_KEY_ESCAPE) {
+                    rodando = false;
+                }
+            }
+
+            else if (estado_atual == game_over) {
+                if (tecla == ALLEGRO_KEY_ENTER) {
+                 vidas = 3;
+                 sala_atual = 1;
+                 x = 100;
+                 y = 275;
+                 
+                quiz_aberto = false;
+                opcao_selecionada = 0;
+                opcao_respondida = -1;
+                estado_atual = ESTADO_MENU;
+
+                }
+                if (tecla == ALLEGRO_KEY_ESCAPE) {
+                    rodando = false;
+                }
+            }
+
 
             // Durante o jogo
             else {
@@ -224,11 +264,15 @@ int main(void)
                     else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1) {
                         opcao_respondida = opcao_selecionada;
 
-                        if (opcao_respondida == 0){
-                        printf("Resposta correta!\n");
-                        }else{
+                        if (opcao_respondida == 0) {
+                            printf("Resposta correta!\n");
+                        } else {
                             vidas--;
-                            printf("Você perdeu uma vida!");
+                            printf("Voce perdeu uma vida!\n");
+                            if(vidas <= 0 ){
+                                quiz_aberto = false;
+                                estado_atual = game_over;
+                            }
                         }
                     }
 
@@ -260,20 +304,25 @@ int main(void)
 
         // ---------------- EVENTOS DO MOUSE ----------------
 
-        else if (
-            evento.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN &&
-            !jogo_iniciado
-        ) {
+        else if (evento.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN) {
 
-            // Verifica se clicou no botao iniciar
-            if (
-                evento.mouse.button == 1 &&
-                evento.mouse.x >= botao_x1 &&
-                evento.mouse.x <= botao_x2 &&
-                evento.mouse.y >= botao_y1 &&
-                evento.mouse.y <= botao_y2
-            ) {
-                jogo_iniciado = true;
+            if (estado_atual == ESTADO_MENU) {
+                // Verifica se clicou no botao iniciar
+                if (
+                    evento.mouse.button == 1 &&
+                    evento.mouse.x >= botao_x1 &&
+                    evento.mouse.x <= botao_x2 &&
+                    evento.mouse.y >= botao_y1 &&
+                    evento.mouse.y <= botao_y2
+                ) {
+                    estado_atual = ESTADO_HISTORIA;
+                }
+            }
+
+            else if (estado_atual == ESTADO_HISTORIA) {
+                if (evento.mouse.button == 1) {
+                    estado_atual = ESTADO_JOGANDO;
+                }
             }
         }
 
@@ -281,8 +330,8 @@ int main(void)
 
         if (evento.type == ALLEGRO_EVENT_TIMER) {
 
-            // Se ainda nao iniciou, desenha a tela inicial
-            if (!jogo_iniciado) {
+            // Tela inicial
+            if (estado_atual == ESTADO_MENU) {
 
                 // Fundo da tela inicial
                 al_draw_scaled_bitmap(
@@ -402,8 +451,126 @@ int main(void)
                 );
             }
 
-            // ---------------- JOGO Tela 1----------------
+            // Tela preta da historia
+            else if (estado_atual == ESTADO_HISTORIA) {
 
+                al_clear_to_color(al_map_rgb(0, 0, 0));
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(219, 198, 167),
+                    largura_tela / 2,
+                    120,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "A HISTORIA"
+                );
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(230, 230, 230),
+                    largura_tela / 2,
+                    210,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Ha seculos, a Biblioteca Esquecida guarda tomos"
+                );
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(230, 230, 230),
+                    largura_tela / 2,
+                    245,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "selados por enigmas antigos e guardioes silenciosos."
+                );
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(230, 230, 230),
+                    largura_tela / 2,
+                    280,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Cada resposta errada cobra seu preco em vitalidade."
+                );
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(180, 180, 180),
+                    largura_tela / 2,
+                    460,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Pressione ENTER, ESPACO ou clique para continuar"
+                );
+            }
+
+            else if (estado_atual == game_over) {
+
+                al_clear_to_color(al_map_rgb(15, 15, 15));
+
+                // Coracoes no topo (ex: 2 cheios e o ultimo quebrado, no estilo da imagem)
+                ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
+                float inicio_x = largura_tela / 2 - 54;
+                float topo_y = 130;
+
+                for (int i = 0; i < 2; i++) {
+                    float cx = inicio_x + (i * 40);
+                    al_draw_filled_circle(cx + 8, topo_y + 8, 8, vermelho);
+                    al_draw_filled_circle(cx + 20, topo_y + 8, 8, vermelho);
+                    al_draw_filled_triangle(
+                        cx + 1, topo_y + 11,
+                        cx + 27, topo_y + 11,
+                        cx + 14, topo_y + 28,
+                        vermelho
+                    );
+                }
+
+                // Coracao quebrado ao lado
+                float qx = inicio_x + (2* 40);
+                al_draw_filled_circle(qx + 7, topo_y + 8, 7, vermelho);
+                al_draw_filled_triangle(
+                    qx + 1, topo_y + 11,
+                    qx + 12, topo_y + 11,
+                    qx + 11, topo_y + 27,
+                    vermelho
+                );
+                al_draw_filled_circle(qx + 21, topo_y + 8, 7, vermelho);
+                al_draw_filled_triangle(
+                    qx + 16, topo_y + 11,
+                    qx + 27, topo_y + 11,
+                    qx + 17, topo_y + 27,
+                    vermelho
+                );
+
+                // Titulo GAME OVER / VOCE MORREU
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(255, 210, 40),
+                    largura_tela / 2,
+                    210,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "VOCE MORREU!"
+                );
+
+                // Instrucao para voltar ao inicio
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(255, 255, 255),
+                    largura_tela / 2,
+                    310,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "VOLTAR AO INICIO?"
+                );
+
+                al_draw_text(
+                    fonte,
+                    al_map_rgb(200, 200, 200),
+                    largura_tela / 2,
+                    355,
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Pressione ENTER para voltar ao inicio"
+                );
+            }
+
+            // Jogo
             else {
 
                 // Movimento do personagem
@@ -487,7 +654,7 @@ int main(void)
                 }
 
                 else {
-                     al_draw_scaled_bitmap(
+                    al_draw_scaled_bitmap(
                         imagem_sala2,
                         0, 0,
                         al_get_bitmap_width(imagem_sala2),
@@ -496,7 +663,7 @@ int main(void)
                         largura_tela,
                         altura_tela,
                         0
-                        );
+                    );
                 }
 
                 // Desenha a zona de interacao
@@ -542,18 +709,24 @@ int main(void)
                     sala_atual
                 );
 
-                for (int i = 0; i < vidas; i++){
-                    float x = 700 + (i * 25);
-                    float y = 15;
+                // Desenha os coracoes de vida
+                for (int i = 0; i < vidas; i++) {
+                    float hx = 700 + (i * 25);
+                    float hy = 15;
 
-                    ALLEGRO_COLOR vermelho = al_map_rgb(255,0,0);
+                    ALLEGRO_COLOR vermelho = al_map_rgb(255, 0, 0);
 
-                    //parte do coração de cima
-                    al_draw_filled_circle(x + 6, y + 6 , 6, vermelho );
-                    al_draw_filled_circle(x + 15, y + 6, 6, vermelho);
+                    // Parte de cima do coracao
+                    al_draw_filled_circle(hx + 6, hy + 6, 6, vermelho);
+                    al_draw_filled_circle(hx + 15, hy + 6, 6, vermelho);
 
-                    //parte de baixo
-                    al_draw_filled_triangle(x, y + 8,x + 21, y + 8,x + 10.5, y + 21,vermelho);
+                    // Parte de baixo do coracao
+                    al_draw_filled_triangle(
+                        hx, hy + 8,
+                        hx + 21, hy + 8,
+                        hx + 10.5, hy + 21,
+                        vermelho
+                    );
                 }
 
                 // ---------------- TELA DO QUIZ ----------------
