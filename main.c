@@ -14,6 +14,72 @@ typedef enum {
     game_over
 } EstadoJogo;
 
+// ---------------------------------------------------------------
+// SISTEMA DE PROPORCAO
+//
+// Todas as medidas do jogo foram pensadas numa tela base de 800x600.
+// As macros abaixo convertem esses valores para o tamanho real da tela:
+//
+//   PX(v)  -> escala horizontal (usa a largura da tela)
+//   PY(v)  -> escala vertical   (usa a altura da tela)
+//   ES(v)  -> escala uniforme   (menor entre as duas, mantem formas
+//                                quadradas/redondas sem distorcer)
+//
+// Para mudar o tamanho da janela, altere apenas largura_tela e
+// altura_tela dentro da main.
+// ---------------------------------------------------------------
+
+#define BASE_LARGURA 800.0f
+#define BASE_ALTURA  600.0f
+
+#define PX(v) ((v) * esc_x)
+#define PY(v) ((v) * esc_y)
+#define ES(v) ((v) * esc)
+
+// Desenha texto escalado (a fonte padrao tem tamanho fixo de 8 pixels,
+// entao usamos uma transformacao para ela acompanhar o tamanho da tela)
+static void desenha_texto(
+    ALLEGRO_FONT *fonte,
+    ALLEGRO_COLOR cor,
+    float x, float y,
+    int flags,
+    float escala,
+    const char *texto
+)
+{
+    ALLEGRO_TRANSFORM antiga = *al_get_current_transform();
+    ALLEGRO_TRANSFORM nova;
+
+    al_identity_transform(&nova);
+    al_scale_transform(&nova, escala, escala);
+    al_translate_transform(&nova, x, y);
+    al_use_transform(&nova);
+
+    al_draw_text(fonte, cor, 0, 0, flags, texto);
+
+    al_use_transform(&antiga);
+}
+
+// Atalho para desenhar texto usando a fonte e a escala da main
+#define TEXTO(cor, x, y, flags, str) \
+    desenha_texto(fonte, (cor), (x), (y), (flags), esc, (str))
+
+// Desenha um coracao pequeno (vidas no canto da tela)
+static void desenha_coracao(float x, float y, float e, ALLEGRO_COLOR cor)
+{
+    // Parte de cima do coracao
+    al_draw_filled_circle(x + 6 * e, y + 6 * e, 6 * e, cor);
+    al_draw_filled_circle(x + 15 * e, y + 6 * e, 6 * e, cor);
+
+    // Parte de baixo do coracao
+    al_draw_filled_triangle(
+        x, y + 8 * e,
+        x + 21 * e, y + 8 * e,
+        x + 10.5f * e, y + 21 * e,
+        cor
+    );
+}
+
 int main(void)
 {
     // Inicializa o Allegro
@@ -47,9 +113,16 @@ int main(void)
     // O addon de fontes nao retorna valor
     al_init_font_addon();
 
-    // Configuracoes da janela
-    int largura_tela = 800;
-    int altura_tela = 600;
+    // ---------------- CONFIGURACOES DA JANELA ----------------
+    // Para mudar a resolucao, altere somente estes dois valores
+
+    const int largura_tela = 1280;
+    const int altura_tela = 720;
+
+    // Fatores de escala em relacao a tela base (800x600)
+    const float esc_x = largura_tela / BASE_LARGURA;
+    const float esc_y = altura_tela / BASE_ALTURA;
+    const float esc = (esc_x < esc_y) ? esc_x : esc_y;
 
     ALLEGRO_DISPLAY *janela =
         al_create_display(largura_tela, altura_tela);
@@ -138,32 +211,33 @@ int main(void)
     // ---------------- TELA INICIAL ----------------
 
     // Posicao do botao iniciar
-    float botao_x1 = 280;
-    float botao_y1 = 420;
-    float botao_x2 = 520;
-    float botao_y2 = 475;
+    float botao_x1 = PX(280);
+    float botao_y1 = PY(420);
+    float botao_x2 = PX(520);
+    float botao_y2 = PY(475);
 
     // ---------------- PERSONAGEM ----------------
 
-    // Posicao fixa no eixo y (o personagem so se move no eixo x)
-    const float Y_INICIAL = 500;
+    float tamanho = ES(50);
+    float velo = PX(5);
 
-    float x = 100;
+    // Posicao fixa no eixo y (o personagem so se move no eixo x)
+    const float Y_INICIAL = PY(500);
+
+    float x = PX(100);
     float y = Y_INICIAL;
-    float tamanho = 50;
-    float velo = 5;
 
     // ---------------- SALAS ----------------
 
     int sala_atual = 1;
-    float margem_entrada = 10;
+    float margem_entrada = PX(10);
     int vidas = 3;
 
     // Zona de interacao alinhada a altura do personagem
-    float zona_x = 700;
-    float zona_y = 450;
-    float zona_largura = 80;
-    float zona_altura = 80;
+    float zona_x = PX(700);
+    float zona_y = PY(450);
+    float zona_largura = PX(80);
+    float zona_altura = PY(80);
 
     bool esta_na_zona = false;
 
@@ -236,7 +310,7 @@ int main(void)
                 if (tecla == ALLEGRO_KEY_ENTER) {
                     vidas = 3;
                     sala_atual = 1;
-                    x = 100;
+                    x = PX(100);
                     y = Y_INICIAL;
 
                     quiz_aberto = false;
@@ -357,67 +431,53 @@ int main(void)
                 );
 
                 // Titulo
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(219, 198, 167),
-                    largura_tela / 2,
-                    100,
+                    largura_tela / 2, PY(100),
                     ALLEGRO_ALIGN_CENTRE,
                     "BIBLIOTECA ESQUECIDA"
                 );
 
                 // Subtitulo
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(220, 220, 220),
-                    largura_tela / 2,
-                    155,
+                    largura_tela / 2, PY(155),
                     ALLEGRO_ALIGN_CENTRE,
                     "Uma aventura entre livros e misterios"
                 );
 
                 // Texto de explicacao
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    230,
+                    largura_tela / 2, PY(230),
                     ALLEGRO_ALIGN_CENTRE,
                     "Explore a biblioteca esquecida"
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    260,
+                    largura_tela / 2, PY(260),
                     ALLEGRO_ALIGN_CENTRE,
                     "e descubra os misterios escondidos."
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    310,
+                    largura_tela / 2, PY(310),
                     ALLEGRO_ALIGN_CENTRE,
                     "Movimente-se com as SETAS do teclado."
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    340,
+                    largura_tela / 2, PY(340),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione E para interagir com objetos."
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    370,
+                    largura_tela / 2, PY(370),
                     ALLEGRO_ALIGN_CENTRE,
                     "Responda ao quiz usando as setas e ENTER."
                 );
@@ -433,23 +493,21 @@ int main(void)
                     botao_x1, botao_y1,
                     botao_x2, botao_y2,
                     al_map_rgb(255, 220, 150),
-                    3
+                    ES(3)
                 );
 
-                al_draw_text(
-                    fonte,
+                // Texto centralizado verticalmente no botao
+                TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2,
-                    botao_y1 + 20,
+                    botao_y1 + ((botao_y2 - botao_y1) - ES(8)) / 2,
                     ALLEGRO_ALIGN_CENTRE,
                     "INICIAR JOGO"
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(200, 200, 200),
-                    largura_tela / 2,
-                    520,
+                    largura_tela / 2, PY(520),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER ou clique para comecar"
                 );
@@ -460,47 +518,37 @@ int main(void)
 
                 al_clear_to_color(al_map_rgb(0, 0, 0));
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(219, 198, 167),
-                    largura_tela / 2,
-                    120,
+                    largura_tela / 2, PY(120),
                     ALLEGRO_ALIGN_CENTRE,
                     "A HISTORIA"
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(230, 230, 230),
-                    largura_tela / 2,
-                    210,
+                    largura_tela / 2, PY(210),
                     ALLEGRO_ALIGN_CENTRE,
                     "Ha seculos, a Biblioteca Esquecida guarda tomos"
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(230, 230, 230),
-                    largura_tela / 2,
-                    245,
+                    largura_tela / 2, PY(245),
                     ALLEGRO_ALIGN_CENTRE,
                     "selados por enigmas antigos e guardioes silenciosos."
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(230, 230, 230),
-                    largura_tela / 2,
-                    280,
+                    largura_tela / 2, PY(280),
                     ALLEGRO_ALIGN_CENTRE,
                     "Cada resposta errada cobra seu preco em vitalidade."
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(180, 180, 180),
-                    largura_tela / 2,
-                    460,
+                    largura_tela / 2, PY(460),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER, ESPACO ou clique para continuar"
                 );
@@ -512,63 +560,57 @@ int main(void)
 
                 // Coracoes no topo (2 cheios e o ultimo quebrado)
                 ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
-                float inicio_x = largura_tela / 2 - 54;
-                float topo_y = 130;
+                float inicio_x = largura_tela / 2 - ES(54);
+                float topo_y = PY(130);
 
                 for (int i = 0; i < 2; i++) {
-                    float cx = inicio_x + (i * 40);
-                    al_draw_filled_circle(cx + 8, topo_y + 8, 8, vermelho);
-                    al_draw_filled_circle(cx + 20, topo_y + 8, 8, vermelho);
+                    float cx = inicio_x + (i * ES(40));
+                    al_draw_filled_circle(cx + ES(8), topo_y + ES(8), ES(8), vermelho);
+                    al_draw_filled_circle(cx + ES(20), topo_y + ES(8), ES(8), vermelho);
                     al_draw_filled_triangle(
-                        cx + 1, topo_y + 11,
-                        cx + 27, topo_y + 11,
-                        cx + 14, topo_y + 28,
+                        cx + ES(1), topo_y + ES(11),
+                        cx + ES(27), topo_y + ES(11),
+                        cx + ES(14), topo_y + ES(28),
                         vermelho
                     );
                 }
 
                 // Coracao quebrado ao lado
-                float qx = inicio_x + (2 * 40);
-                al_draw_filled_circle(qx + 7, topo_y + 8, 7, vermelho);
+                float qx = inicio_x + (2 * ES(40));
+                al_draw_filled_circle(qx + ES(7), topo_y + ES(8), ES(7), vermelho);
                 al_draw_filled_triangle(
-                    qx + 1, topo_y + 11,
-                    qx + 12, topo_y + 11,
-                    qx + 11, topo_y + 27,
+                    qx + ES(1), topo_y + ES(11),
+                    qx + ES(12), topo_y + ES(11),
+                    qx + ES(11), topo_y + ES(27),
                     vermelho
                 );
-                al_draw_filled_circle(qx + 21, topo_y + 8, 7, vermelho);
+                al_draw_filled_circle(qx + ES(21), topo_y + ES(8), ES(7), vermelho);
                 al_draw_filled_triangle(
-                    qx + 16, topo_y + 11,
-                    qx + 27, topo_y + 11,
-                    qx + 17, topo_y + 27,
+                    qx + ES(16), topo_y + ES(11),
+                    qx + ES(27), topo_y + ES(11),
+                    qx + ES(17), topo_y + ES(27),
                     vermelho
                 );
 
                 // Titulo GAME OVER / VOCE MORREU
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 210, 40),
-                    largura_tela / 2,
-                    210,
+                    largura_tela / 2, PY(210),
                     ALLEGRO_ALIGN_CENTRE,
                     "VOCE MORREU!"
                 );
 
                 // Instrucao para voltar ao inicio
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    largura_tela / 2,
-                    310,
+                    largura_tela / 2, PY(310),
                     ALLEGRO_ALIGN_CENTRE,
                     "VOLTAR AO INICIO?"
                 );
 
-                al_draw_text(
-                    fonte,
+                TEXTO(
                     al_map_rgb(200, 200, 200),
-                    largura_tela / 2,
-                    355,
+                    largura_tela / 2, PY(355),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER para voltar ao inicio"
                 );
@@ -665,7 +707,7 @@ int main(void)
                         zona_x + zona_largura,
                         zona_y + zona_altura,
                         al_map_rgb(0, 0, 255),
-                        2
+                        ES(2)
                     );
                 }
 
@@ -680,54 +722,41 @@ int main(void)
                 // Mensagem para interagir
                 if (esta_na_zona && !quiz_aberto) {
 
-                    al_draw_text(
-                        fonte,
+                    TEXTO(
                         al_map_rgb(255, 255, 255),
-                        largura_tela / 2,
-                        50,
+                        largura_tela / 2, PY(50),
                         ALLEGRO_ALIGN_CENTRE,
                         "Pressione [E] para interagir com o bau!"
                     );
                 }
 
                 // Mostra a sala atual
-                al_draw_textf(
-                    fonte,
+                char texto_sala[32];
+                snprintf(texto_sala, sizeof(texto_sala), "Sala %d", sala_atual);
+
+                TEXTO(
                     al_map_rgb(255, 255, 255),
-                    10, 10,
+                    PX(10), PY(10),
                     0,
-                    "Sala %d",
-                    sala_atual
+                    texto_sala
                 );
 
-                // Desenha os coracoes de vida
+                // Desenha os coracoes de vida (canto superior direito)
                 for (int i = 0; i < vidas; i++) {
-                    float hx = 700 + (i * 25);
-                    float hy = 15;
+                    float hx = PX(700) + (i * ES(25));
+                    float hy = PY(15);
 
-                    ALLEGRO_COLOR vermelho = al_map_rgb(255, 0, 0);
-
-                    // Parte de cima do coracao
-                    al_draw_filled_circle(hx + 6, hy + 6, 6, vermelho);
-                    al_draw_filled_circle(hx + 15, hy + 6, 6, vermelho);
-
-                    // Parte de baixo do coracao
-                    al_draw_filled_triangle(
-                        hx, hy + 8,
-                        hx + 21, hy + 8,
-                        hx + 10.5, hy + 21,
-                        vermelho
-                    );
+                    desenha_coracao(hx, hy, esc, al_map_rgb(255, 0, 0));
                 }
 
                 // ---------------- TELA DO QUIZ ----------------
 
                 if (quiz_aberto) {
 
-                    float jx1 = 150;
-                    float jy1 = 100;
-                    float jx2 = 650;
-                    float jy2 = 450;
+                    float jx1 = PX(150);
+                    float jy1 = PY(100);
+                    float jx2 = PX(650);
+                    float jy2 = PY(450);
 
                     // Escurece o fundo
                     al_draw_filled_rectangle(
@@ -745,25 +774,21 @@ int main(void)
                     al_draw_rectangle(
                         jx1, jy1, jx2, jy2,
                         al_map_rgb(255, 255, 255),
-                        3
+                        ES(3)
                     );
 
                     // Titulo
-                    al_draw_text(
-                        fonte,
+                    TEXTO(
                         al_map_rgb(255, 220, 80),
-                        (jx1 + jx2) / 2,
-                        jy1 + 20,
+                        (jx1 + jx2) / 2, jy1 + PY(20),
                         ALLEGRO_ALIGN_CENTRE,
                         "QUIZ"
                     );
 
                     // Pergunta
-                    al_draw_text(
-                        fonte,
+                    TEXTO(
                         al_map_rgb(255, 255, 255),
-                        (jx1 + jx2) / 2,
-                        jy1 + 60,
+                        (jx1 + jx2) / 2, jy1 + PY(60),
                         ALLEGRO_ALIGN_CENTRE,
                         "Qual foi a estrategia usada para invadir Troia?"
                     );
@@ -771,7 +796,7 @@ int main(void)
                     // Alternativas
                     for (int i = 0; i < 4; i++) {
 
-                        float oy = jy1 + 110 + i * 40;
+                        float oy = jy1 + PY(110) + i * PY(40);
 
                         ALLEGRO_COLOR cor_texto =
                             al_map_rgb(200, 200, 200);
@@ -779,8 +804,8 @@ int main(void)
                         if (i == opcao_selecionada) {
 
                             al_draw_filled_rectangle(
-                                jx1 + 30, oy - 8,
-                                jx2 - 30, oy + 22,
+                                jx1 + PX(30), oy - PY(8),
+                                jx2 - PX(30), oy + PY(22),
                                 al_map_rgb(70, 70, 120)
                             );
 
@@ -788,11 +813,9 @@ int main(void)
                                 al_map_rgb(255, 255, 255);
                         }
 
-                        al_draw_text(
-                            fonte,
+                        TEXTO(
                             cor_texto,
-                            jx1 + 50,
-                            oy,
+                            jx1 + PX(50), oy,
                             0,
                             alternativas[i]
                         );
@@ -801,23 +824,26 @@ int main(void)
                     // Resposta escolhida
                     if (opcao_respondida >= 0) {
 
-                        al_draw_textf(
-                            fonte,
-                            al_map_rgb(120, 255, 120),
-                            (jx1 + jx2) / 2,
-                            jy2 - 70,
-                            ALLEGRO_ALIGN_CENTRE,
+                        char texto_resposta[128];
+                        snprintf(
+                            texto_resposta,
+                            sizeof(texto_resposta),
                             "Voce respondeu: %s",
                             alternativas[opcao_respondida]
+                        );
+
+                        TEXTO(
+                            al_map_rgb(120, 255, 120),
+                            (jx1 + jx2) / 2, jy2 - PY(70),
+                            ALLEGRO_ALIGN_CENTRE,
+                            texto_resposta
                         );
                     }
 
                     // Instrucoes
-                    al_draw_text(
-                        fonte,
+                    TEXTO(
                         al_map_rgb(180, 180, 180),
-                        (jx1 + jx2) / 2,
-                        jy2 - 35,
+                        (jx1 + jx2) / 2, jy2 - PY(35),
                         ALLEGRO_ALIGN_CENTRE,
                         "[CIMA/BAIXO] escolher  [ENTER] responder  [E/ESC] fechar"
                     );
