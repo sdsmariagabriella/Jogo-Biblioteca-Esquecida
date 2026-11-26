@@ -262,6 +262,13 @@ int main(void)
 
     al_start_timer(timer);
 
+    //------------------------------------------------
+
+    //---------- animação da historia ------------------
+    int caracteres_visiveis = 0;
+    int contador_frames = 0;
+    const int velocidade_texto = 10; // Quanto menor, mais rapido o texto aparece
+
     // ---------------- LOOP PRINCIPAL ----------------
 
     while (rodando) {
@@ -285,6 +292,9 @@ int main(void)
 
                 if (tecla == ALLEGRO_KEY_ENTER) {
                     estado_atual = ESTADO_HISTORIA;
+                    estado_atual = ESTADO_HISTORIA;
+                    caracteres_visiveis = 0; //restar o texto
+                    contador_frames = 0; //resetar o contador de frames
                 }
 
                 if (tecla == ALLEGRO_KEY_ESCAPE) {
@@ -518,42 +528,54 @@ int main(void)
 
                 al_clear_to_color(al_map_rgb(0, 0, 0));
 
-                TEXTO(
-                    al_map_rgb(219, 198, 167),
-                    largura_tela / 2, PY(120),
-                    ALLEGRO_ALIGN_CENTRE,
-                    "A HISTORIA"
-                );
+                // Usamos 'static' para que o vetor seja criado apenas uma vez na memoria
+                static const char *linhas_historia[] = {
+                    "A HISTORIA",
+                    "",
+                    "Apos o falecimento de seus pais, enquanto organizava a casa, uma jovem",
+                    "encontrou uma caixa antiga com seu proprio nome gravado, parecendo",
+                    "pertencer a um tataravo.",
+                    "",
+                    "Ao abri-la com uma chave herdada de sua mae (um artefato passado de geracao em geracao)",
+                    "encontrou apenas um endereco enigmatico.",
+                    "Movida pela curiosidade e pelo misterio de sua ancestralidade, ela decide",
+                    "",
+                    "seguir a pista... e acaba encontrando a biblioteca esquecida."
+                };
+                int total_linhas = 11;
 
-                TEXTO(
-                    al_map_rgb(230, 230, 230),
-                    largura_tela / 2, PY(210),
-                    ALLEGRO_ALIGN_CENTRE,
-                    "Ha seculos, a Biblioteca Esquecida guarda tomos"
-                );
+                // Logica para revelar as linhas gradualmente com o tempo
+                contador_frames++;
+                if (contador_frames >= velocidade_texto) {
+                    if (caracteres_visiveis < total_linhas) {
+                        caracteres_visiveis++;
+                    }
+                    contador_frames = 0;
+                }
 
-                TEXTO(
-                    al_map_rgb(230, 230, 230),
-                    largura_tela / 2, PY(245),
-                    ALLEGRO_ALIGN_CENTRE,
-                    "selados por enigmas antigos e guardioes silenciosos."
-                );
+                // Desenha cada linha visivel uma embaixo da outra
+                float y_inicial = PY(120);
+                float espacamento_linha = PY(30);
 
-                TEXTO(
-                    al_map_rgb(230, 230, 230),
-                    largura_tela / 2, PY(280),
-                    ALLEGRO_ALIGN_CENTRE,
-                    "Cada resposta errada cobra seu preco em vitalidade."
-                );
+                for (int i = 0; i < caracteres_visiveis && i < total_linhas; i++) {
+                    TEXTO(
+                        al_map_rgb(230, 230, 230),
+                        largura_tela / 2, 
+                        y_inicial + (i * espacamento_linha),
+                        ALLEGRO_ALIGN_CENTRE,
+                        linhas_historia[i]
+                    );
+                }
 
+                // Aviso para continuar no rodape
                 TEXTO(
                     al_map_rgb(180, 180, 180),
-                    largura_tela / 2, PY(460),
+                    largura_tela / 2, PY(550),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER, ESPACO ou clique para continuar"
                 );
             }
-
+            
             else if (estado_atual == game_over) {
 
                 al_clear_to_color(al_map_rgb(15, 15, 15));
