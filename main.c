@@ -145,8 +145,11 @@ int main(void)
 
     // ---------------- PERSONAGEM ----------------
 
+    // Posicao fixa no eixo y (o personagem so se move no eixo x)
+    const float Y_INICIAL = 500;
+
     float x = 100;
-    float y = 275;
+    float y = Y_INICIAL;
     float tamanho = 50;
     float velo = 5;
 
@@ -156,9 +159,9 @@ int main(void)
     float margem_entrada = 10;
     int vidas = 3;
 
-    // Zona de interacao
+    // Zona de interacao alinhada a altura do personagem
     float zona_x = 700;
-    float zona_y = 250;
+    float zona_y = 450;
     float zona_largura = 80;
     float zona_altura = 80;
 
@@ -227,24 +230,25 @@ int main(void)
                 }
             }
 
+            // Tela de game over
             else if (estado_atual == game_over) {
-                if (tecla == ALLEGRO_KEY_ENTER) {
-                 vidas = 3;
-                 sala_atual = 1;
-                 x = 100;
-                 y = 275;
-                 
-                quiz_aberto = false;
-                opcao_selecionada = 0;
-                opcao_respondida = -1;
-                estado_atual = ESTADO_MENU;
 
+                if (tecla == ALLEGRO_KEY_ENTER) {
+                    vidas = 3;
+                    sala_atual = 1;
+                    x = 100;
+                    y = Y_INICIAL;
+
+                    quiz_aberto = false;
+                    opcao_selecionada = 0;
+                    opcao_respondida = -1;
+                    estado_atual = ESTADO_MENU;
                 }
+
                 if (tecla == ALLEGRO_KEY_ESCAPE) {
                     rodando = false;
                 }
             }
-
 
             // Durante o jogo
             else {
@@ -269,7 +273,7 @@ int main(void)
                         } else {
                             vidas--;
                             printf("Voce perdeu uma vida!\n");
-                            if(vidas <= 0 ){
+                            if (vidas <= 0) {
                                 quiz_aberto = false;
                                 estado_atual = game_over;
                             }
@@ -506,7 +510,7 @@ int main(void)
 
                 al_clear_to_color(al_map_rgb(15, 15, 15));
 
-                // Coracoes no topo (ex: 2 cheios e o ultimo quebrado, no estilo da imagem)
+                // Coracoes no topo (2 cheios e o ultimo quebrado)
                 ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
                 float inicio_x = largura_tela / 2 - 54;
                 float topo_y = 130;
@@ -524,7 +528,7 @@ int main(void)
                 }
 
                 // Coracao quebrado ao lado
-                float qx = inicio_x + (2* 40);
+                float qx = inicio_x + (2 * 40);
                 al_draw_filled_circle(qx + 7, topo_y + 8, 7, vermelho);
                 al_draw_filled_triangle(
                     qx + 1, topo_y + 11,
@@ -573,7 +577,7 @@ int main(void)
             // Jogo
             else {
 
-                // Movimento do personagem
+                // Movimento do personagem (somente no eixo x)
                 if (!quiz_aberto) {
 
                     ALLEGRO_KEYBOARD_STATE key_state;
@@ -595,21 +599,8 @@ int main(void)
                         }
                     }
 
-                    if (al_key_down(&key_state, ALLEGRO_KEY_UP)) {
-                        y -= velo;
-
-                        if (y < 0) {
-                            y = 0;
-                        }
-                    }
-
-                    if (al_key_down(&key_state, ALLEGRO_KEY_DOWN)) {
-                        y += velo;
-
-                        if (y + tamanho > altura_tela) {
-                            y = altura_tela - tamanho;
-                        }
-                    }
+                    // Garante que o personagem fique sempre na mesma altura
+                    y = Y_INICIAL;
 
                     // Troca de sala
                     if (
