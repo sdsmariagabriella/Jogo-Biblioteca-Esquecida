@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -37,7 +38,9 @@ typedef enum {
 #define ES(v) ((v) * esc)
 
 // Desenha texto escalado (a fonte padrao tem tamanho fixo de 8 pixels,
-// entao usamos uma transformacao para ela acompanhar o tamanho da tela)
+// entao usamos uma transformacao para ela acompanhar o tamanho da tela).
+// A transformacao atual (ex: tremor de tela) e combinada com a escala,
+// assim o texto tambem treme junto com o resto da tela.
 static void desenha_texto(
     ALLEGRO_FONT *fonte,
     ALLEGRO_COLOR cor,
@@ -53,6 +56,7 @@ static void desenha_texto(
     al_identity_transform(&nova);
     al_scale_transform(&nova, escala, escala);
     al_translate_transform(&nova, x, y);
+    al_compose_transform(&nova, &antiga);
     al_use_transform(&nova);
 
     al_draw_text(fonte, cor, 0, 0, flags, texto);
@@ -119,6 +123,9 @@ int main(void)
     const int largura_tela = 1280;
     const int altura_tela = 720;
 
+    // Quadros por segundo do jogo
+    const int FPS = 60;
+
     // Fatores de escala em relacao a tela base (800x600)
     const float esc_x = largura_tela / BASE_LARGURA;
     const float esc_y = altura_tela / BASE_ALTURA;
@@ -155,7 +162,7 @@ int main(void)
         return 1;
     }
 
-    // carregar imagem game over 
+    // carregar imagem game over
     ALLEGRO_BITMAP *imagem_game_over =
         al_load_bitmap("img/bibliotecaRuinas.png");
     if(!imagem_game_over){
@@ -176,7 +183,7 @@ int main(void)
     }
 
     // Cria o timer
-    ALLEGRO_TIMER *timer = al_create_timer(1.0 / 60.0);
+    ALLEGRO_TIMER *timer = al_create_timer(1.0 / FPS);
 
     if (!timer) {
         printf("Erro ao criar o timer!\n");
@@ -257,12 +264,27 @@ int main(void)
     int opcao_selecionada = 0;
     int opcao_respondida = -1;
 
+    // Indice da alternativa correta (0 = A, 1 = B, 2 = C, 3 = D)
+    const int resposta_certa = 1;
+
     const char *alternativas[4] = {
     "A) Um grande terremoto",
     "B) A erupcao do Monte Vesuvio",
     "C) Uma grande inundacao",
     "D) Um incendio na cidade"
     };
+
+    // ---------------- MENSAGEM DE RESPOSTA E TREMOR ----------------
+
+    // Duracao da mensagem "Resposta correta!" / "Resposta errada..." (2 segundos)
+    const int duracao_mensagem = 2 * FPS;
+
+    // Duracao do tremor de tela ao errar (meio segundo)
+    const int duracao_tremor = FPS / 2;
+
+    int frames_mensagem = 0;       // frames restantes da mensagem (0 = sem mensagem)
+    int frames_tremor = 0;         // frames restantes do tremor (0 = sem tremor)
+    bool ultima_resposta_correta = false;
 
     // ---------------- ESTADOS DO JOGO ----------------
 
@@ -301,7 +323,6 @@ int main(void)
 
                 if (tecla == ALLEGRO_KEY_ENTER) {
                     estado_atual = ESTADO_HISTORIA;
-                    estado_atual = ESTADO_HISTORIA;
                     caracteres_visiveis = 0; //restar o texto
                     contador_frames = 0; //resetar o contador de frames
                 }
@@ -335,6 +356,8 @@ int main(void)
                     quiz_aberto = false;
                     opcao_selecionada = 0;
                     opcao_respondida = -1;
+                    frames_mensagem = 0;
+                    frames_tremor = 0;
                     estado_atual = ESTADO_MENU;
                 }
 
@@ -348,7 +371,12 @@ int main(void)
 
                 if (quiz_aberto) {
 
-                    if (tecla == ALLEGRO_KEY_UP) {
+                    // Enquanto a mensagem de resposta aparece, as teclas sao ignoradas
+                    if (frames_mensagem > 0) {
+                        // nada acontece
+                    }
+
+                    else if (tecla == ALLEGRO_KEY_UP) {
                         opcao_selecionada =
                             (opcao_selecionada + 3) % 4;
                     }
@@ -361,15 +389,17 @@ int main(void)
                     else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1) {
                         opcao_respondida = opcao_selecionada;
 
-                        if (opcao_respondida == 1) {
+                        // Inicia a mensagem de 2 segundos
+                        frames_mensagem = duracao_mensagem;
+
+                        if (opcao_respondida == resposta_certa) {
+                            ultima_resposta_correta = true;
                             printf("Resposta correta!\n");
                         } else {
+                            ultima_resposta_correta = false;
                             vidas--;
+                            frames_tremor = duracao_tremor;
                             printf("Voce perdeu uma vida!\n");
-                            if (vidas <= 0) {
-                                quiz_aberto = false;
-                                estado_atual = game_over;
-                            }
                         }
                     }
 
@@ -565,7 +595,7 @@ int main(void)
                 for (int i = 0; i < caracteres_visiveis && i < total_linhas; i++) {
                     TEXTO(
                         al_map_rgb(230, 230, 230),
-                        largura_tela / 2, 
+                        largura_tela / 2,
                         y_inicial + (i * espacamento_linha),
                         ALLEGRO_ALIGN_CENTRE,
                         linhas_historia[i]
@@ -583,24 +613,24 @@ int main(void)
             // ---------------- TELA DE GAME OVER ----------------
             else if (estado_atual == game_over) {
 
-                    // Desenha a imagem de fundo
-                    al_draw_scaled_bitmap(
-                        imagem_game_over,
-                        0, 0,
-                        al_get_bitmap_width(imagem_game_over),
-                        al_get_bitmap_height(imagem_game_over),
-                        0, 0,
-                        largura_tela,
-                        altura_tela,
-                        0
-                    );
+                // Desenha a imagem de fundo
+                al_draw_scaled_bitmap(
+                    imagem_game_over,
+                    0, 0,
+                    al_get_bitmap_width(imagem_game_over),
+                    al_get_bitmap_height(imagem_game_over),
+                    0, 0,
+                    largura_tela,
+                    altura_tela,
+                    0
+                );
 
                 // Escurece a imagem para destacar os textos
-                    al_draw_filled_rectangle(
-                        0, 0,
-                        largura_tela, altura_tela,
-                        al_map_rgba(0, 0, 0, 150)
-                    );
+                al_draw_filled_rectangle(
+                    0, 0,
+                    largura_tela, altura_tela,
+                    al_map_rgba(0, 0, 0, 150)
+                );
 
                 // Coracoes no topo (2 cheios e o ultimo quebrado)
                 ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
@@ -662,6 +692,40 @@ int main(void)
 
             // Jogo
             else {
+
+                // Contagem da mensagem de resposta (2 segundos)
+                if (frames_mensagem > 0) {
+                    frames_mensagem--;
+
+                    // Quando a mensagem termina, o quiz fecha junto
+                    if (frames_mensagem == 0) {
+                        quiz_aberto = false;
+
+                        // Se acabaram as vidas, vai para o game over
+                        if (vidas <= 0) {
+                            estado_atual = game_over;
+                        }
+                    }
+                }
+
+                // Calcula o tremor de tela (diminui aos poucos ate parar)
+                float tremor_x = 0;
+                float tremor_y = 0;
+
+                if (frames_tremor > 0) {
+                    float forca = ES(8) * frames_tremor / duracao_tremor;
+
+                    tremor_x = ((rand() % 201) - 100) / 100.0f * forca;
+                    tremor_y = ((rand() % 201) - 100) / 100.0f * forca;
+
+                    frames_tremor--;
+                }
+
+                // Aplica o tremor em tudo que for desenhado a seguir
+                ALLEGRO_TRANSFORM tremor;
+                al_identity_transform(&tremor);
+                al_translate_transform(&tremor, tremor_x, tremor_y);
+                al_use_transform(&tremor);
 
                 // Movimento do personagem (somente no eixo x)
                 if (!quiz_aberto) {
@@ -863,10 +927,19 @@ int main(void)
 
                         if (i == opcao_selecionada) {
 
+                            // Cor do destaque: azul normal, verde se acertou, vermelho se errou
+                            ALLEGRO_COLOR cor_destaque = al_map_rgb(70, 70, 120);
+
+                            if (frames_mensagem > 0) {
+                                cor_destaque = ultima_resposta_correta
+                                    ? al_map_rgb(40, 120, 60)
+                                    : al_map_rgb(140, 40, 40);
+                            }
+
                             al_draw_filled_rectangle(
                                 jx1 + PX(30), oy - PY(8),
                                 jx2 - PX(30), oy + PY(22),
-                                al_map_rgb(70, 70, 120)
+                                cor_destaque
                             );
 
                             cor_texto =
@@ -881,33 +954,42 @@ int main(void)
                         );
                     }
 
-                    // Resposta escolhida
-                    if (opcao_respondida >= 0) {
+                    // Mensagem de resposta (aparece por 2 segundos)
+                    if (frames_mensagem > 0) {
 
-                        char texto_resposta[128];
-                        snprintf(
-                            texto_resposta,
-                            sizeof(texto_resposta),
-                            "Voce respondeu: %s",
-                            alternativas[opcao_respondida]
-                        );
+                        const char *mensagem = ultima_resposta_correta
+                            ? "Resposta correta!"
+                            : "Resposta errada...";
 
-                        TEXTO(
-                            al_map_rgb(120, 255, 120),
-                            (jx1 + jx2) / 2, jy2 - PY(70),
+                        ALLEGRO_COLOR cor_mensagem = ultima_resposta_correta
+                            ? al_map_rgb(120, 255, 120)
+                            : al_map_rgb(255, 90, 90);
+
+                        // Texto com o dobro do tamanho normal
+                        desenha_texto(
+                            fonte,
+                            cor_mensagem,
+                            (jx1 + jx2) / 2, jy2 - PY(45),
                             ALLEGRO_ALIGN_CENTRE,
-                            texto_resposta
+                            esc * 2,
+                            mensagem
                         );
                     }
 
-                    // Instrucoes
-                    TEXTO(
-                        al_map_rgb(180, 180, 180),
-                        (jx1 + jx2) / 2, jy2 - PY(35),
-                        ALLEGRO_ALIGN_CENTRE,
-                        "[CIMA/BAIXO] escolher  [ENTER] responder  [E/ESC] fechar"
-                    );
+                    // Instrucoes (somem enquanto a mensagem esta na tela)
+                    else {
+                        TEXTO(
+                            al_map_rgb(180, 180, 180),
+                            (jx1 + jx2) / 2, jy2 - PY(35),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "[CIMA/BAIXO] escolher  [ENTER] responder  [E/ESC] fechar"
+                        );
+                    }
                 }
+
+                // Remove o tremor para nao afetar os proximos desenhos
+                al_identity_transform(&tremor);
+                al_use_transform(&tremor);
             }
 
             // Atualiza a tela
