@@ -536,11 +536,7 @@ int main(void)
                     "encontrou uma caixa antiga com seu proprio nome gravado, parecendo",
                     "pertencer a um tataravo.",
                     "",
-                    "Ao abri-la com uma chave herdada de sua mae (um artefato passado de geracao em geracao)",
-                    "encontrou apenas um endereco enigmatico.",
-                    "Movida pela curiosidade e pelo misterio de sua ancestralidade, ela decide",
-                    "",
-                    "seguir a pista... e acaba encontrando a biblioteca esquecida."
+
                 };
                 int total_linhas = 11;
 
