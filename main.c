@@ -288,6 +288,14 @@ int main(void)
     float zona3_altura = PY(80);
     bool esta_na_zona_sala2_3 = false;
 
+    // zona de interação da luz na Sala 3
+    float zona4_x = PX(350);
+    float zona4_y = PY(420);
+    float zona4_largura = PX(80);
+    float zona4_altura = PY(100);
+
+    bool esta_na_zona_sala3_luz = false;
+
     // ---------------- QUIZ ----------------
 
     bool quiz_aberto = false;
@@ -316,6 +324,12 @@ int main(void)
         "B) Assassinato de Francisco Ferdinando",
         "C) A Revolucao Francesa",
         "D) A Independencia dos Estados Unidos"};
+
+    const char *alternativas4[4] = {
+        "A) Os moradores descobriram uma passagem secreta.",
+        "B) Os soldados gregos estavam escondidos dentro do cavalo.",
+        "C) A cidade foi destruída por um terremoto.",
+        "D) O exército construiu uma muralha ao redor da cidade."};
 
     // ---------------- MENSAGEM DE RESPOSTA E TREMOR ----------------
 
@@ -501,6 +515,11 @@ int main(void)
                         else if (sala_atual == 2 && esta_na_zona_sala2_3)
                         {
                             quiz_atual = 3;
+                            quiz_aberto = true;
+                        }
+                        else if (sala_atual == 3 && esta_na_zona_sala3_luz)
+                        {
+                            quiz_atual = 4;
                             quiz_aberto = true;
                         }
 
@@ -885,6 +904,11 @@ int main(void)
                                         x + tamanho > zona3_x &&
                                         y < zona3_y + zona3_altura &&
                                         y + tamanho > zona3_y);
+                esta_na_zona_sala3_luz = (sala_atual == 3 &&
+                                          x < zona4_x + zona4_largura &&
+                                          x + tamanho > zona4_x &&
+                                          y < zona4_y + zona4_altura &&
+                                          y + tamanho > zona4_y);
 
                 // Desenha o fundo
                 if (sala_atual == 1)
@@ -925,7 +949,6 @@ int main(void)
                         altura_tela,
                         0);
                 }
-
 
                 // Desenha a zona de interacao
                 if (sala_atual == 1)
@@ -971,6 +994,14 @@ int main(void)
                         largura_tela / 2, PY(50),
                         ALLEGRO_ALIGN_CENTRE,
                         "Pressione [E] para examinar o vaso!");
+                }
+                else if (esta_na_zona_sala3_luz && !quiz_aberto)
+                {
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        largura_tela / 2, PY(50),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "Pressione [E] para interagir com a luz!");
                 }
 
                 // Mostra a sala atual
@@ -1092,6 +1123,33 @@ int main(void)
                               ALLEGRO_ALIGN_CENTRE,
                               "O que mudou o rumo da historia mundial?");
                     }
+                    else if (quiz_atual == 4)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Um exercito fingiu desistir de uma guerra de dez anos");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "e deixou um grande presente na porta da cidade inimiga.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Os moradores aceitaram o presente e comemoraram,");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "mas naquela noite a cidade foi destruida.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(148),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "O que aconteceu?");
+                    }
 
                     // Alternativas
                     const char **alternativas_atuais;
@@ -1102,6 +1160,8 @@ int main(void)
                         alternativas_atuais = alternativas2;
                     else if (quiz_atual == 3)
                         alternativas_atuais = alternativas3;
+                    else if (quiz_atual == 4)
+                        alternativas_atuais = alternativas4;
 
                     for (int i = 0; i < 4; i++)
                     {
