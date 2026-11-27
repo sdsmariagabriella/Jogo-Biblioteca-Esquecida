@@ -13,7 +13,8 @@ typedef enum
     ESTADO_MENU,
     ESTADO_HISTORIA,
     ESTADO_JOGANDO,
-    game_over
+    game_over,
+    vitoria
 } EstadoJogo;
 
 // ---------------------------------------------------------------
@@ -187,6 +188,15 @@ int main(void)
     if (!imagem_game_over)
     {
         printf("Erro ao carregar a imagem de game over!\n");
+        return 1;
+    }
+
+    // carregar imagem vitoria
+    ALLEGRO_BITMAP *imagem_vitoria =
+        al_load_bitmap("img/biblioteca.png");
+    if (!imagem_vitoria)
+    {
+        printf("Erro ao carregar a imagem da biblioteca reconstruida!\n");
         return 1;
     }
 
@@ -471,6 +481,10 @@ int main(void)
                         {
                             ultima_resposta_correta = true;
                             printf("Resposta correta!\n");
+                            if (quiz_atual == 4)
+                            {
+                                estado_atual = vitoria;
+                            }
                         }
                         else
                         {
@@ -781,6 +795,36 @@ int main(void)
                     largura_tela / 2, PY(355),
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER para voltar ao inicio");
+            }
+
+            else if (estado_atual == vitoria)
+            {
+                al_draw_scaled_bitmap(
+                    imagem_vitoria,
+                    0, 0,
+                    al_get_bitmap_width(imagem_vitoria),
+                    al_get_bitmap_height(imagem_vitoria),
+                    0, 0,
+                    largura_tela, altura_tela,
+                    0);
+
+                TEXTO(
+                    al_map_rgb(255, 220, 80),
+                    largura_tela / 2, PY(180),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "VOCE VENCEU!");
+
+                TEXTO(
+                    al_map_rgb(255, 255, 255),
+                    largura_tela / 2, PY(240),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Todos os enigmas foram resolvidos!");
+
+                TEXTO(
+                    al_map_rgb(255, 255, 255),
+                    largura_tela / 2, PY(275),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "A biblioteca foi reconstruida!");
             }
 
             // Jogo
@@ -1250,6 +1294,7 @@ int main(void)
     al_destroy_bitmap(imagem_sala1);
     al_destroy_bitmap(imagem_sala3);
     al_destroy_bitmap(imagem_game_over);
+    al_destroy_bitmap(imagem_vitoria);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
     al_destroy_display(janela);
