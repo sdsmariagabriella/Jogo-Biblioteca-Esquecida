@@ -269,6 +269,12 @@ int main(void)
     float zona2_altura = PY(80);
 
     bool esta_na_zona_sala2 = false;
+    // Zona de interacao sala 2 do terceiro enigma (vaso de planta)
+    float zona3_x = PX(0);
+    float zona3_y = PY(490);
+    float zona3_largura = PX(55);
+    float zona3_altura = PY(80);
+    bool esta_na_zona_sala2_3 = false;
 
     // ---------------- QUIZ ----------------
 
@@ -278,7 +284,7 @@ int main(void)
     int opcao_respondida = -1;
     int quiz_atual = 1;
 
-    // Indice da alternativa correta (0 = A, 1 = B, 2 = C, 3 = D)
+    // Indice da alternativa correta  (0 = A, 1 = B, 2 = C, 3 = D)
     const int resposta_certa = 1;
 
     const char *alternativas[4] = {
@@ -292,6 +298,12 @@ int main(void)
         "B) Corrida Espacial",
         "C) Revolucao Industrial",
         "D) Guerra dos Cem Anos"};
+
+    const char *alternativas3[4] = {
+        "A) A queda do Imperio Romano",
+        "B) Assassinato de Francisco Ferdinando",
+        "C) A Revolucao Francesa",
+        "D) A Independencia dos Estados Unidos"};
 
     // ---------------- MENSAGEM DE RESPOSTA E TREMOR ----------------
 
@@ -472,6 +484,11 @@ int main(void)
                         else if (sala_atual == 2 && esta_na_zona_sala2)
                         {
                             quiz_atual = 2;
+                            quiz_aberto = true;
+                        }
+                        else if (sala_atual == 2 && esta_na_zona_sala2_3)
+                        {
+                            quiz_atual = 3;
                             quiz_aberto = true;
                         }
 
@@ -838,6 +855,11 @@ int main(void)
                                       x + tamanho > zona2_x &&
                                       y < zona2_y + zona2_altura &&
                                       y + tamanho > zona2_y);
+                esta_na_zona_sala2_3 = (sala_atual == 2 &&
+                                        x < zona3_x + zona3_largura &&
+                                        x + tamanho > zona3_x &&
+                                        y < zona3_y + zona3_altura &&
+                                        y + tamanho > zona3_y);
 
                 // Desenha o fundo
                 if (sala_atual == 1)
@@ -903,6 +925,14 @@ int main(void)
                         largura_tela / 2, PY(50),
                         ALLEGRO_ALIGN_CENTRE,
                         "Pressione [E] para interagir com o livro!");
+                }
+                else if (esta_na_zona_sala2_3 && !quiz_aberto)
+                {
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        largura_tela / 2, PY(50),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "Pressione [E] para examinar o vaso!");
                 }
 
                 // Mostra a sala atual
@@ -1002,14 +1032,38 @@ int main(void)
                               ALLEGRO_ALIGN_CENTRE,
                               "Que disputa foi essa?");
                     }
+                    else if (quiz_atual == 3)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Em 1914, um acontecimento envolvendo o herdeiro");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "do Imperio Austro-Hungaro contribuiu para o inicio");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "de um grande conflito na Europa.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "O que mudou o rumo da historia mundial?");
+                    }
 
                     // Alternativas
                     const char **alternativas_atuais;
 
                     if (quiz_atual == 1)
                         alternativas_atuais = alternativas;
-                    else
+                    else if (quiz_atual == 2)
                         alternativas_atuais = alternativas2;
+                    else if (quiz_atual == 3)
+                        alternativas_atuais = alternativas3;
 
                     for (int i = 0; i < 4; i++)
                     {
