@@ -66,7 +66,7 @@ static void desenha_texto(
 
 // Atalho para desenhar texto usando a fonte e a escala da main
 #define TEXTO(cor, x, y, flags, str) \
-    desenha_texto(fonte, (cor), (x), (y), (flags), esc, (str))
+    desenha_texto(fonte, (cor), (x), (y), (flags),  esc * 1.5f, (str))
 
 // Desenha um coracao pequeno (vidas no canto da tela)
 static void desenha_coracao(float x, float y, float e, ALLEGRO_COLOR cor)
@@ -861,10 +861,10 @@ int main(void)
 
                 if (quiz_aberto) {
 
-                    float jx1 = PX(150);
-                    float jy1 = PY(100);
-                    float jx2 = PX(650);
-                    float jy2 = PY(450);
+                    float jx1 = PX(60);
+                    float jy1 = PY(60);
+                    float jx2 = PX(740);
+                    float jy2 = PY(540);
 
                     // Escurece o fundo
                     al_draw_filled_rectangle(
@@ -898,7 +898,7 @@ int main(void)
                         al_map_rgb(255, 255, 255),
                         (jx1 + jx2) / 2, jy1 + PY(60),
                         ALLEGRO_ALIGN_CENTRE,
-                        "Em uma manha, o sol simplesmente desapareceu"
+                        "Em uma manhã, o sol simplesmente desapareceu"
                     );
 
                     // Segunda linha
@@ -914,13 +914,22 @@ int main(void)
                         al_map_rgb(255, 255, 255),
                         (jx1 + jx2) / 2, jy1 + PY(104),
                         ALLEGRO_ALIGN_CENTRE,
-                        "congelando a vida dos moradores por quase dois mil anos. O que causou isso?"
+                        "congelando a vida dos moradores por quase dois mil anos."
                     );
+
+                    //quarta linha
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        (jx1 + jx2) / 2, jy1 + PY(126),
+                        ALLEGRO_ALIGN_CENTRE,
+                        " O que causou isso?"
+                    );
+
 
                     // Alternativas
                     for (int i = 0; i < 4; i++) {
 
-                        float oy = jy1 + PY(150) + i * PY(40);
+                        float oy = jy1 + PY(180) + i * PY(45);
 
                         ALLEGRO_COLOR cor_texto =
                             al_map_rgb(200, 200, 200);
