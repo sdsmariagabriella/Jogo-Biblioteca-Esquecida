@@ -11,14 +11,15 @@
 
 - ---
 Tela de comando do jogo
-<img width="1272" height="718" alt="Captura de tela 2026-11-26 230526" src="https://github.com/user-attachments/assets/fe1506fc-2fbd-4a43-802c-56566c652993" />
+<img width="1272" height="718" alt="Captura de tela 2026-11-27 123324" src="https://github.com/user-attachments/assets/5d9f9740-1f0f-4420-960f-fb3cae6bbc65" />
 
 ---
 
 Tela sobre a historia
-<img width="1280" height="713" alt="Captura de tela 2026-11-26 230548" src="https://github.com/user-attachments/assets/fa3fdeb0-a161-436f-bd3d-0cff34c01604" />
+<img width="1278" height="719" alt="Captura de tela 2026-11-27 123335" src="https://github.com/user-attachments/assets/3859ce32-a55f-4a38-8c9b-9a7ed31e37b2" />
 
 ---
 
 Tela quando morre!
-<img width="1265" height="721" alt="Captura de tela 2026-11-26 224647" src="https://github.com/user-attachments/assets/0fc3381f-74b0-4e2d-906e-bf79a4318344" />
+<img width="1277" height="718" alt="Captura de tela 2026-11-27 123301" src="https://github.com/user-attachments/assets/e11710b0-0b28-4df6-8396-98d6d752d309" />
+
