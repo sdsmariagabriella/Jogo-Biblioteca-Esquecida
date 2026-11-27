@@ -19,6 +19,10 @@ Tela sobre a historia
 <img width="1278" height="719" alt="Captura de tela 2026-11-27 123335" src="https://github.com/user-attachments/assets/3859ce32-a55f-4a38-8c9b-9a7ed31e37b2" />
 
 ---
+Tela quando vence!
+<img width="1279" height="715" alt="Captura de tela 2026-11-27 162039" src="https://github.com/user-attachments/assets/a16e9b5e-07e9-40ed-8ff1-f3e3595d06c9" />
+
+---
 
 Tela quando morre!
 <img width="1277" height="718" alt="Captura de tela 2026-11-27 123301" src="https://github.com/user-attachments/assets/e11710b0-0b28-4df6-8396-98d6d752d309" />
