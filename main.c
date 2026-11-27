@@ -155,6 +155,15 @@ int main(void)
         return 1;
     }
 
+    // carregar imagem game over 
+    ALLEGRO_BITMAP *imagem_game_over =
+        al_load_bitmap("img/bibliotecaRuinas.png");
+    if(!imagem_game_over){
+        printf("Erro ao carregar a imagem de game over!\n");
+        return 1;
+    }
+
+
     // Cria a fonte
     ALLEGRO_FONT *fonte = al_create_builtin_font();
 
@@ -538,7 +547,7 @@ int main(void)
                     "",
 
                 };
-                int total_linhas = 11;
+                int total_linhas = 6;
 
                 // Logica para revelar as linhas gradualmente com o tempo
                 contador_frames++;
@@ -571,10 +580,27 @@ int main(void)
                     "Pressione ENTER, ESPACO ou clique para continuar"
                 );
             }
-            
+            // ---------------- TELA DE GAME OVER ----------------
             else if (estado_atual == game_over) {
 
-                al_clear_to_color(al_map_rgb(15, 15, 15));
+                    // Desenha a imagem de fundo
+                    al_draw_scaled_bitmap(
+                        imagem_game_over,
+                        0, 0,
+                        al_get_bitmap_width(imagem_game_over),
+                        al_get_bitmap_height(imagem_game_over),
+                        0, 0,
+                        largura_tela,
+                        altura_tela,
+                        0
+                    );
+
+                // Escurece a imagem para destacar os textos
+                    al_draw_filled_rectangle(
+                        0, 0,
+                        largura_tela, altura_tela,
+                        al_map_rgba(0, 0, 0, 150)
+                    );
 
                 // Coracoes no topo (2 cheios e o ultimo quebrado)
                 ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
@@ -878,6 +904,7 @@ int main(void)
     al_destroy_font(fonte);
     al_destroy_bitmap(imagem_sala2);
     al_destroy_bitmap(imagem_sala1);
+    al_destroy_bitmap(imagem_game_over);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
     al_destroy_display(janela);
