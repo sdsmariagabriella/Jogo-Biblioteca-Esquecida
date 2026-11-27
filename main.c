@@ -331,6 +331,9 @@ int main(void)
     // Quiz 0 = bau do terreo, quiz 1 = andar de cima
     int quiz_atual = 0;
 
+    // Quizzes ja resolvidos corretamente (0 = bau, 1 = andar de cima)
+    bool quiz_resolvido[2] = { false, false };
+
     const Quiz quizzes[2] = {
         // Quiz 0: bau
         {
@@ -385,6 +388,10 @@ int main(void)
     int frames_mensagem = 0;       // frames restantes da mensagem (0 = sem mensagem)
     int frames_tremor = 0;         // frames restantes do tremor (0 = sem tremor)
     bool ultima_resposta_correta = false;
+
+    // Aviso "Parte organizada" (item cujo quiz ja foi resolvido, 2 segundos)
+    const int duracao_aviso = 2 * FPS;
+    int frames_aviso = 0;
 
     // ---------------- ESTADOS DO JOGO ----------------
 
@@ -460,6 +467,9 @@ int main(void)
                     opcao_respondida = -1;
                     frames_mensagem = 0;
                     frames_tremor = 0;
+                    frames_aviso = 0;
+                    quiz_resolvido[0] = false;
+                    quiz_resolvido[1] = false;
                     estado_atual = ESTADO_MENU;
                 }
 
@@ -496,6 +506,7 @@ int main(void)
 
                         if (opcao_respondida == quizzes[quiz_atual].resposta_certa) {
                             ultima_resposta_correta = true;
+                            quiz_resolvido[quiz_atual] = true;
                             printf("Resposta correta!\n");
                         } else {
                             ultima_resposta_correta = false;
@@ -523,12 +534,26 @@ int main(void)
                         tecla == ALLEGRO_KEY_E &&
                         (esta_na_zona || esta_na_zona2)
                     ) {
-                        // Escolhe o quiz de acordo com a zona
-                        quiz_atual = esta_na_zona ? 0 : 1;
+                        // Qual quiz pertence a esta zona
+                        int quiz_da_zona = esta_na_zona ? 0 : 1;
 
-                        quiz_aberto = true;
-                        opcao_selecionada = 0;
-                        opcao_respondida = -1;
+                        // Enquanto o aviso esta na tela, a tecla E e ignorada
+                        if (frames_aviso > 0) {
+                            // nada acontece
+                        }
+
+                        // Quiz ja resolvido: so mostra o aviso por 2 segundos
+                        else if (quiz_resolvido[quiz_da_zona]) {
+                            frames_aviso = duracao_aviso;
+                        }
+
+                        // Quiz ainda nao resolvido: abre o quiz
+                        else {
+                            quiz_atual = quiz_da_zona;
+                            quiz_aberto = true;
+                            opcao_selecionada = 0;
+                            opcao_respondida = -1;
+                        }
                     }
                 }
             }
@@ -813,6 +838,14 @@ int main(void)
                     }
                 }
 
+                // Contagem do aviso "Parte organizada" (2 segundos)
+                if (frames_aviso > 0) {
+                    frames_aviso--;
+                }
+
+                // A sala 2 so e liberada depois de resolver pelo menos 1 enigma
+                bool sala2_liberada = quiz_resolvido[0] || quiz_resolvido[1];
+
                 // Calcula o tremor de tela (diminui aos poucos ate parar)
                 float tremor_x = 0;
                 float tremor_y = 0;
@@ -951,9 +984,10 @@ int main(void)
                             }
                         }
 
-                        // Troca de sala
+                        // Troca de sala (a sala 2 so abre com 1 enigma resolvido)
                         if (
                             sala_atual == 1 &&
+                            sala2_liberada &&
                             x + tamanho >= largura_tela
                         ) {
                             sala_atual = 2;
@@ -1067,7 +1101,7 @@ int main(void)
                 );
 
                 // Mensagens de interacao (uma de cada vez)
-                if (!quiz_aberto) {
+                if (!quiz_aberto && frames_aviso == 0) {
 
                     float centro_atual = x + tamanho / 2;
 
@@ -1120,6 +1154,23 @@ int main(void)
                     }
                 }
 
+                // Avisa que a passagem esta bloqueada (so no terreo da sala 1)
+                if (
+                    !quiz_aberto &&
+                    sala_atual == 1 &&
+                    andar == 0 &&
+                    !na_escada &&
+                    !sala2_liberada &&
+                    x + tamanho >= largura_tela
+                ) {
+                    TEXTO(
+                        al_map_rgb(255, 180, 80),
+                        largura_tela / 2, PY(80),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "Resolva pelo menos um enigma para avancar!"
+                    );
+                }
+
                 // Mostra a sala atual
                 char texto_sala[32];
                 snprintf(texto_sala, sizeof(texto_sala), "Sala %d", sala_atual);
@@ -1137,6 +1188,40 @@ int main(void)
                     float hy = PY(15);
 
                     desenha_coracao(hx, hy, esc, al_map_rgb(255, 0, 0));
+                }
+
+                // ---------------- AVISO "PARTE ORGANIZADA" ----------------
+
+                if (frames_aviso > 0) {
+
+                    float centro_x = largura_tela / 2;
+                    float centro_y = altura_tela / 2;
+                    float meia_largura = PX(150);
+                    float meia_altura = PY(40);
+
+                    // Janela do aviso
+                    al_draw_filled_rectangle(
+                        centro_x - meia_largura, centro_y - meia_altura,
+                        centro_x + meia_largura, centro_y + meia_altura,
+                        al_map_rgb(40, 40, 60)
+                    );
+
+                    al_draw_rectangle(
+                        centro_x - meia_largura, centro_y - meia_altura,
+                        centro_x + meia_largura, centro_y + meia_altura,
+                        al_map_rgb(255, 255, 255),
+                        ES(3)
+                    );
+
+                    // Texto com o dobro do tamanho normal, centralizado na janela
+                    desenha_texto(
+                        fonte,
+                        al_map_rgb(120, 255, 120),
+                        centro_x, centro_y - ES(8),
+                        ALLEGRO_ALIGN_CENTRE,
+                        esc * 2,
+                        "Parte organizada"
+                    );
                 }
 
                 // ---------------- TELA DO QUIZ ----------------
