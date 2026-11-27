@@ -169,6 +169,18 @@ int main(void)
         return 1;
     }
 
+    // imagem da sala 3
+    ALLEGRO_BITMAP *imagem_sala3 =
+        al_load_bitmap("img/bibliotecaSuja.png");
+    if (!imagem_sala3)
+    {
+        printf("Erro ao carregar a imagem da sala 3!\n");
+        al_destroy_bitmap(imagem_sala2);
+        al_destroy_bitmap(imagem_sala1);
+        al_destroy_display(janela);
+        return 1;
+    }
+
     // carregar imagem game over
     ALLEGRO_BITMAP *imagem_game_over =
         al_load_bitmap("img/bibliotecaRuinas.png");
@@ -840,6 +852,19 @@ int main(void)
                         sala_atual = 1;
                         x = largura_tela - tamanho - margem_entrada;
                     }
+                    // Sala 2 para Sala 3
+                    else if (sala_atual == 2 && x + tamanho >= largura_tela)
+                    {
+                        sala_atual = 3;
+                        x = margem_entrada;
+                    }
+
+                    // Sala 3 para Sala 2
+                    else if (sala_atual == 3 && x <= 0)
+                    {
+                        sala_atual = 2;
+                        x = largura_tela - tamanho - margem_entrada;
+                    }
                 }
 
                 // Verifica colisao com a zona
@@ -876,7 +901,7 @@ int main(void)
                         0);
                 }
 
-                else
+                else if (sala_atual == 2)
                 {
                     al_draw_scaled_bitmap(
                         imagem_sala2,
@@ -888,6 +913,19 @@ int main(void)
                         altura_tela,
                         0);
                 }
+                else if (sala_atual == 3)
+                {
+                    al_draw_scaled_bitmap(
+                        imagem_sala3,
+                        0, 0,
+                        al_get_bitmap_width(imagem_sala3),
+                        al_get_bitmap_height(imagem_sala3),
+                        0, 0,
+                        largura_tela,
+                        altura_tela,
+                        0);
+                }
+
 
                 // Desenha a zona de interacao
                 if (sala_atual == 1)
@@ -1150,6 +1188,7 @@ int main(void)
     al_destroy_font(fonte);
     al_destroy_bitmap(imagem_sala2);
     al_destroy_bitmap(imagem_sala1);
+    al_destroy_bitmap(imagem_sala3);
     al_destroy_bitmap(imagem_game_over);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
