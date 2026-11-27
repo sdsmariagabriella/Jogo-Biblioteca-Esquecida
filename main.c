@@ -2,31 +2,20 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <math.h>
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_image.h>
 
-// Coloque 1 para desenhar a linha da escada e do andar de cima
-// (ajuda a ajustar os valores da escada na main)
-#define DEBUG_ESCADA 0
-
-typedef enum {
+typedef enum
+{
     ESTADO_MENU,
     ESTADO_HISTORIA,
     ESTADO_JOGANDO,
-    game_over
+    game_over,
+    vitoria
 } EstadoJogo;
-
-// Dados de um quiz: ate 4 linhas de pergunta, 4 alternativas e a correta
-typedef struct {
-    const char *pergunta[4];
-    int num_linhas;
-    const char *alternativas[4];
-    int resposta_certa;   // 0 = A, 1 = B, 2 = C, 3 = D
-} Quiz;
 
 // ---------------------------------------------------------------
 // SISTEMA DE PROPORCAO
@@ -38,24 +27,23 @@ typedef struct {
 //   PY(v)  -> escala vertical   (usa a altura da tela)
 //   ES(v)  -> escala uniforme   (menor entre as duas, mantem formas
 //                                quadradas/redondas sem distorcer)
-//   FX(f)  -> posicao como fracao da largura (0.0 a 1.0)
-//   FY(f)  -> posicao como fracao da altura  (0.0 a 1.0)
-//
-// FX e FY sao usados para a escada e o andar de cima, porque o fundo
-// ocupa a tela inteira: uma fracao da tela e uma fracao da imagem.
 //
 // Para mudar o tamanho da janela, altere apenas largura_tela e
 // altura_tela dentro da main.
 // ---------------------------------------------------------------
 
 #define BASE_LARGURA 800.0f
-#define BASE_ALTURA  600.0f
+#define BASE_ALTURA 600.0f
 
 #define PX(v) ((v) * esc_x)
 #define PY(v) ((v) * esc_y)
 #define ES(v) ((v) * esc)
-#define FX(f) ((f) * largura_tela)
-#define FY(f) ((f) * altura_tela)
+
+// Quantidade total de quizzes cadastrados no jogo (o indice 0 nao e usado)
+#define TOTAL_QUIZZES 5
+
+// Quantidade de enigmas resolvidos necessarios para vencer o jogo
+#define ENIGMAS_PARA_VITORIA 4
 
 // Desenha texto escalado (a fonte padrao tem tamanho fixo de 8 pixels,
 // entao usamos uma transformacao para ela acompanhar o tamanho da tela).
@@ -67,8 +55,7 @@ static void desenha_texto(
     float x, float y,
     int flags,
     float escala,
-    const char *texto
-)
+    const char *texto)
 {
     ALLEGRO_TRANSFORM antiga = *al_get_current_transform();
     ALLEGRO_TRANSFORM nova;
@@ -86,7 +73,7 @@ static void desenha_texto(
 
 // Atalho para desenhar texto usando a fonte e a escala da main
 #define TEXTO(cor, x, y, flags, str) \
-    desenha_texto(fonte, (cor), (x), (y), (flags), esc, (str))
+    desenha_texto(fonte, (cor), (x), (y), (flags), esc * 1.5f, (str))
 
 // Desenha um coracao pequeno (vidas no canto da tela)
 static void desenha_coracao(float x, float y, float e, ALLEGRO_COLOR cor)
@@ -100,57 +87,81 @@ static void desenha_coracao(float x, float y, float e, ALLEGRO_COLOR cor)
         x, y + 8 * e,
         x + 21 * e, y + 8 * e,
         x + 10.5f * e, y + 21 * e,
-        cor
-    );
+        cor);
 }
 
-// Altura dos "pes" do personagem em cada ponto da escada.
-// Na base (centro = x1) fica na altura do chao e no topo (centro = x2)
-// fica na altura do andar de cima.
-static float pes_na_escada(
-    float centro,
-    float x1, float x2,
-    float pes_base, float pes_topo
-)
+// Desenha o bau no andar de baixo da sala 1
+static void desenha_bau(float x, float y, float largura, float altura, float esc)
 {
-    float t = (centro - x1) / (x2 - x1);
+    ALLEGRO_COLOR madeira_escura = al_map_rgb(95, 55, 25);
+    ALLEGRO_COLOR madeira_clara = al_map_rgb(135, 80, 35);
+    ALLEGRO_COLOR metal = al_map_rgb(215, 175, 55);
+    ALLEGRO_COLOR contorno = al_map_rgb(40, 20, 10);
 
-    if (t < 0) {
-        t = 0;
-    }
-    if (t > 1) {
-        t = 1;
-    }
+    float altura_tampa = altura * 0.38f;
 
-    return pes_base + (pes_topo - pes_base) * t;
+    // Base do bau
+    al_draw_filled_rectangle(
+        x, y + altura_tampa,
+        x + largura, y + altura,
+        madeira_escura);
+
+    // Tampa do bau
+    al_draw_filled_rectangle(
+        x, y,
+        x + largura, y + altura_tampa,
+        madeira_clara);
+
+    // Faixas de metal nas laterais
+    float largura_faixa = largura * 0.12f;
+    al_draw_filled_rectangle(x, y, x + largura_faixa, y + altura, metal);
+    al_draw_filled_rectangle(x + largura - largura_faixa, y, x + largura, y + altura, metal);
+
+    // Contornos
+    al_draw_rectangle(x, y, x + largura, y + altura, contorno, ES(2));
+    al_draw_line(x, y + altura_tampa, x + largura, y + altura_tampa, contorno, ES(2));
+
+    // Fechadura central
+    float fech_larg = largura * 0.18f;
+    float fech_alt = altura * 0.24f;
+    float fech_x = x + (largura - fech_larg) / 2.0f;
+    float fech_y = y + altura_tampa - fech_alt * 0.35f;
+
+    al_draw_filled_rectangle(fech_x, fech_y, fech_x + fech_larg, fech_y + fech_alt, metal);
+    al_draw_rectangle(fech_x, fech_y, fech_x + fech_larg, fech_y + fech_alt, contorno, ES(1.5f));
 }
 
 int main(void)
 {
     // Inicializa o Allegro
-    if (!al_init()) {
+    if (!al_init())
+    {
         printf("Erro ao iniciar o Allegro!\n");
         return 1;
     }
 
     // Inicializa teclado e mouse
-    if (!al_install_keyboard()) {
+    if (!al_install_keyboard())
+    {
         printf("Erro no teclado!\n");
         return 1;
     }
 
-    if (!al_install_mouse()) {
+    if (!al_install_mouse())
+    {
         printf("Erro no mouse!\n");
         return 1;
     }
 
     // Inicializa os addons
-    if (!al_init_primitives_addon()) {
+    if (!al_init_primitives_addon())
+    {
         printf("Erro nas primitivas!\n");
         return 1;
     }
 
-    if (!al_init_image_addon()) {
+    if (!al_init_image_addon())
+    {
         printf("Erro nas imagens!\n");
         return 1;
     }
@@ -175,7 +186,8 @@ int main(void)
     ALLEGRO_DISPLAY *janela =
         al_create_display(largura_tela, altura_tela);
 
-    if (!janela) {
+    if (!janela)
+    {
         printf("Erro ao criar a janela!\n");
         return 1;
     }
@@ -186,7 +198,8 @@ int main(void)
     ALLEGRO_BITMAP *imagem_sala1 =
         al_load_bitmap("img/bibliotecaDestruida2.png");
 
-    if (!imagem_sala1) {
+    if (!imagem_sala1)
+    {
         printf("Erro ao carregar a imagem da sala 1!\n");
         al_destroy_display(janela);
         return 1;
@@ -196,8 +209,21 @@ int main(void)
     ALLEGRO_BITMAP *imagem_sala2 =
         al_load_bitmap("img/bibliotecaDestruida1.png");
 
-    if (!imagem_sala2) {
+    if (!imagem_sala2)
+    {
         printf("Erro ao carregar a imagem da sala 2!\n");
+        al_destroy_bitmap(imagem_sala1);
+        al_destroy_display(janela);
+        return 1;
+    }
+
+    // imagem da sala 3
+    ALLEGRO_BITMAP *imagem_sala3 =
+        al_load_bitmap("img/bibliotecaSuja.png");
+    if (!imagem_sala3)
+    {
+        printf("Erro ao carregar a imagem da sala 3!\n");
+        al_destroy_bitmap(imagem_sala2);
         al_destroy_bitmap(imagem_sala1);
         al_destroy_display(janela);
         return 1;
@@ -206,16 +232,26 @@ int main(void)
     // carregar imagem game over
     ALLEGRO_BITMAP *imagem_game_over =
         al_load_bitmap("img/bibliotecaRuinas.png");
-    if(!imagem_game_over){
+    if (!imagem_game_over)
+    {
         printf("Erro ao carregar a imagem de game over!\n");
         return 1;
     }
 
+    // carregar imagem vitoria
+    ALLEGRO_BITMAP *imagem_vitoria =
+        al_load_bitmap("img/biblioteca.png");
+    if (!imagem_vitoria)
+    {
+        printf("Erro ao carregar a imagem da biblioteca reconstruida!\n");
+        return 1;
+    }
 
     // Cria a fonte
     ALLEGRO_FONT *fonte = al_create_builtin_font();
 
-    if (!fonte) {
+    if (!fonte)
+    {
         printf("Erro ao criar a fonte!\n");
         al_destroy_bitmap(imagem_sala2);
         al_destroy_bitmap(imagem_sala1);
@@ -226,7 +262,8 @@ int main(void)
     // Cria o timer
     ALLEGRO_TIMER *timer = al_create_timer(1.0 / FPS);
 
-    if (!timer) {
+    if (!timer)
+    {
         printf("Erro ao criar o timer!\n");
         al_destroy_font(fonte);
         al_destroy_bitmap(imagem_sala2);
@@ -238,7 +275,8 @@ int main(void)
     // Cria a fila de eventos
     ALLEGRO_EVENT_QUEUE *fila = al_create_event_queue();
 
-    if (!fila) {
+    if (!fila)
+    {
         printf("Erro ao criar a fila de eventos!\n");
         al_destroy_timer(timer);
         al_destroy_font(fonte);
@@ -250,20 +288,16 @@ int main(void)
 
     // Registra os eventos
     al_register_event_source(
-        fila, al_get_keyboard_event_source()
-    );
+        fila, al_get_keyboard_event_source());
 
     al_register_event_source(
-        fila, al_get_mouse_event_source()
-    );
+        fila, al_get_mouse_event_source());
 
     al_register_event_source(
-        fila, al_get_display_event_source(janela)
-    );
+        fila, al_get_display_event_source(janela));
 
     al_register_event_source(
-        fila, al_get_timer_event_source(timer)
-    );
+        fila, al_get_timer_event_source(timer));
 
     // ---------------- TELA INICIAL ----------------
 
@@ -278,26 +312,43 @@ int main(void)
     float tamanho = ES(50);
     float velo = PX(5);
 
-    // Posicao do chao no eixo y (o personagem so sai dela na escada)
+    // Posicao fixa no eixo y (o personagem so se move no eixo x)
+    // Andar de baixo (chao)
     const float Y_INICIAL = PY(500);
+
+    // Andar de cima (varanda da sala 1). Se o quadrado ficar acima ou
+    // abaixo do piso da varanda, ajuste apenas este valor.
+    const float Y_CIMA = PY(160);
 
     float x = PX(100);
     float y = Y_INICIAL;
 
-    // ---------------- ESCADA E ANDAR DE CIMA (SALA 1) ----------------
-    // Valores como fracao da tela (0.0 a 1.0). Se a escada nao ficar
-    // alinhada com a imagem, ajuste os valores abaixo (use DEBUG_ESCADA).
+    // ---------------- ESCADA (SALA 1) ----------------
 
-    const float escada_x1 = FX(0.215);  // base da escada (centro do personagem)
-    const float escada_x2 = FX(0.345);  // topo da escada (centro do personagem)
-    const float margem_escada = FX(0.03); // distancia para poder entrar na escada
+    // Onde o personagem consegue subir a escada (parte de baixo)
+    const float escada_base_x = PX(165);
+    const float escada_base_largura = PX(90);
 
-    const float pes_chao = Y_INICIAL + tamanho;  // altura dos pes no chao
-    const float pes_cima = FY(0.325);            // altura dos pes no andar de cima
-    const float Y_CIMA = pes_cima - tamanho;     // posicao y do quadrado la em cima
+    // Limite direito da varanda (onde a escada chega la em cima)
+    const float x_max_cima = PX(281) - tamanho;
 
-    int andar = 0;            // 0 = terreo, 1 = andar de cima
-    bool na_escada = false;   // true enquanto esta subindo ou descendo
+    // Perto do topo da escada o personagem consegue descer
+    const float x_topo_escada_min = x_max_cima - PX(60);
+
+    // Ponto onde o personagem aparece ao descer a escada
+    const float x_pe_escada = PX(190);
+
+    // Duracao da animacao de subir/descer (3/4 de segundo)
+    const int duracao_escada = (FPS * 3) / 4;
+
+    bool andar_cima = false; // true = personagem esta na varanda
+    int escada_estado = 0;   // 0 = parado, 1 = subindo, 2 = descendo
+    float progresso_escada = 0;
+    float x_origem_escada = 0, y_origem_escada = 0;
+    float x_destino_escada = 0, y_destino_escada = 0;
+
+    bool na_base_escada = false;
+    bool na_topo_escada = false;
 
     // ---------------- SALAS ----------------
 
@@ -305,21 +356,42 @@ int main(void)
     float margem_entrada = PX(10);
     int vidas = 3;
 
-    // Zona de interacao do bau (terreo)
+    // Zona de interacao do bau alinhada ao chao do andar de baixo
     float zona_x = PX(700);
-    float zona_y = PY(450);
-    float zona_largura = PX(80);
-    float zona_altura = PY(80);
+    float zona_y = PY(495);
+    float zona_largura = PX(75);
+    float zona_altura = PY(55);
 
     bool esta_na_zona = false;
+    // Zona de interacao da Sala 2 (onde esta o livro sobre a mesa)
+    float zona2_x = PX(500);
+    float zona2_y = PY(450);
+    float zona2_largura = PX(100);
+    float zona2_altura = PY(80);
 
-    // Zona de interacao do andar de cima
-    float zona2_x = FX(0.08);
-    float zona2_largura = FX(0.10);
-    float zona2_y = Y_CIMA - PY(15);
-    float zona2_altura = tamanho + PY(30);
+    bool esta_na_zona_sala2 = false;
+    // Zona de interacao sala 2 do terceiro enigma (vaso de planta)
+    float zona3_x = PX(0);
+    float zona3_y = PY(490);
+    float zona3_largura = PX(55);
+    float zona3_altura = PY(80);
+    bool esta_na_zona_sala2_3 = false;
 
-    bool esta_na_zona2 = false;
+    // zona de interação da luz na Sala 3
+    float zona4_x = PX(350);
+    float zona4_y = PY(420);
+    float zona4_largura = PX(80);
+    float zona4_altura = PY(100);
+
+    bool esta_na_zona_sala3_luz = false;
+
+    // zona de interacao da estante, na varanda da sala 1 (quiz do Titanic)
+    float zona5_x = PX(60);
+    float zona5_y = PY(110);
+    float zona5_largura = PX(100);
+    float zona5_altura = PY(100);
+
+    bool esta_na_zona_estante = false;
 
     // ---------------- QUIZ ----------------
 
@@ -327,55 +399,51 @@ int main(void)
 
     int opcao_selecionada = 0;
     int opcao_respondida = -1;
+    int quiz_atual = 1;
 
-    // Quiz 0 = bau do terreo, quiz 1 = andar de cima
-    int quiz_atual = 0;
+    // Indice da alternativa correta de cada quiz (0 = A, 1 = B, 2 = C, 3 = D)
+    // A posicao 0 nao e usada: o quiz 1 esta na posicao 1, e assim por diante
+    const int respostas_certas[TOTAL_QUIZZES + 1] = {0, 1, 1, 1, 1, 2};
 
-    // Quizzes ja resolvidos corretamente (0 = bau, 1 = andar de cima)
-    bool quiz_resolvido[2] = { false, false };
+    // Quais quizzes ja foram respondidos corretamente
+    bool quiz_resolvido[TOTAL_QUIZZES + 1] = {false};
 
-    const Quiz quizzes[2] = {
-        // Quiz 0: bau
-        {
-            {
-                "Em uma manha, o sol simplesmente desapareceu",
-                "e uma chuva de pedras e cinzas cobriu a cidade,",
-                "congelando a vida dos moradores por quase dois mil anos. O que causou isso?"
-            },
-            3,
-            {
-                "A) Um grande terremoto",
-                "B) A erupcao do Monte Vesuvio",
-                "C) Uma grande inundacao",
-                "D) Um incendio na cidade"
-            },
-            1
-        },
+    // Flags de bloqueio de passagem entre salas
+    bool passagem_sala2_bloqueada = false;
+    bool passagem_sala3_bloqueada = false;
 
-        // Quiz 1: andar de cima (Titanic)
-        //
-        // Explicacao: O naufragio do RMS Titanic (1912). O navio colidiu com
-        // um iceberg no Oceano Atlantico Norte em uma noite sem lua. Por
-        // causa da alta velocidade e do tamanho da embarcacao, ele nao
-        // conseguiu se desviar a tempo, e a falta de botes salva-vidas
-        // suficientes para todos agravou a tragedia.
-        {
-            {
-                "A maior e mais luxuosa embarcacao de sua epoca, considerada",
-                "praticamente inquebravel, afundou em sua viagem inaugural,",
-                "matando mais de 1.500 pessoas em aguas congelantes, mesmo",
-                "apos avisos de perigo na rota. O que aconteceu?"
-            },
-            4,
-            {
-                "A) O naufragio do Lusitania (1915)",
-                "B) O naufragio do Costa Concordia (2012)",
-                "C) O naufragio do RMS Titanic (1912)",
-                "D) O naufragio do Andrea Doria (1956)"
-            },
-            2
-        }
-    };
+    // Temporizador para exibir "parte restaurada!" ao interagir novamente
+    int frames_restaurada = 0;
+
+    const char *alternativas[4] = {
+        "A) Um grande terremoto",
+        "B) A erupcao do Monte Vesuvio",
+        "C) Uma grande inundacao",
+        "D) Um incendio na cidade"};
+
+    const char *alternativas2[4] = {
+        "A) Corrida Armamentista",
+        "B) Corrida Espacial",
+        "C) Revolucao Industrial",
+        "D) Guerra dos Cem Anos"};
+
+    const char *alternativas3[4] = {
+        "A) A queda do Imperio Romano",
+        "B) Assassinato de Francisco Ferdinando",
+        "C) A Revolucao Francesa",
+        "D) A Independencia dos Estados Unidos"};
+
+    const char *alternativas4[4] = {
+        "A) Os moradores descobriram uma passagem secreta.",
+        "B) Os soldados gregos estavam escondidos dentro do cavalo.",
+        "C) A cidade foi destruída por um terremoto.",
+        "D) O exército construiu uma muralha ao redor da cidade."};
+
+    const char *alternativas5[4] = {
+        "A) O naufragio do Lusitania",
+        "B) O naufragio do encouracado Bismarck",
+        "C) O naufragio do RMS Titanic",
+        "D) O naufragio do Andrea Doria"};
 
     // ---------------- MENSAGEM DE RESPOSTA E TREMOR ----------------
 
@@ -385,13 +453,9 @@ int main(void)
     // Duracao do tremor de tela ao errar (meio segundo)
     const int duracao_tremor = FPS / 2;
 
-    int frames_mensagem = 0;       // frames restantes da mensagem (0 = sem mensagem)
-    int frames_tremor = 0;         // frames restantes do tremor (0 = sem tremor)
+    int frames_mensagem = 0; // frames restantes da mensagem (0 = sem mensagem)
+    int frames_tremor = 0;   // frames restantes do tremor (0 = sem tremor)
     bool ultima_resposta_correta = false;
-
-    // Aviso "Parte organizada" (item cujo quiz ja foi resolvido, 2 segundos)
-    const int duracao_aviso = 2 * FPS;
-    int frames_aviso = 0;
 
     // ---------------- ESTADOS DO JOGO ----------------
 
@@ -409,106 +473,131 @@ int main(void)
 
     // ---------------- LOOP PRINCIPAL ----------------
 
-    while (rodando) {
+    while (rodando)
+    {
 
         ALLEGRO_EVENT evento;
         al_wait_for_event(fila, &evento);
 
         // Fechar a janela
-        if (evento.type == ALLEGRO_EVENT_DISPLAY_CLOSE) {
+        if (evento.type == ALLEGRO_EVENT_DISPLAY_CLOSE)
+        {
             rodando = false;
         }
 
         // ---------------- EVENTOS DO TECLADO ----------------
 
-        else if (evento.type == ALLEGRO_EVENT_KEY_DOWN) {
+        else if (evento.type == ALLEGRO_EVENT_KEY_DOWN)
+        {
 
             int tecla = evento.keyboard.keycode;
 
             // Na tela inicial
-            if (estado_atual == ESTADO_MENU) {
+            if (estado_atual == ESTADO_MENU)
+            {
 
-                if (tecla == ALLEGRO_KEY_ENTER) {
+                if (tecla == ALLEGRO_KEY_ENTER)
+                {
                     estado_atual = ESTADO_HISTORIA;
-                    caracteres_visiveis = 0; //restar o texto
-                    contador_frames = 0; //resetar o contador de frames
+                    caracteres_visiveis = 0; // restar o texto
+                    contador_frames = 0;     // resetar o contador de frames
                 }
 
-                if (tecla == ALLEGRO_KEY_ESCAPE) {
+                if (tecla == ALLEGRO_KEY_ESCAPE)
+                {
                     rodando = false;
                 }
             }
 
             // Na tela da historia
-            else if (estado_atual == ESTADO_HISTORIA) {
+            else if (estado_atual == ESTADO_HISTORIA)
+            {
 
-                if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_SPACE) {
+                if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_SPACE)
+                {
                     estado_atual = ESTADO_JOGANDO;
                 }
 
-                if (tecla == ALLEGRO_KEY_ESCAPE) {
+                if (tecla == ALLEGRO_KEY_ESCAPE)
+                {
                     rodando = false;
                 }
             }
 
-            // Tela de game over
-            else if (estado_atual == game_over) {
+            // Tela de game over ou vitoria
+            else if (estado_atual == game_over || estado_atual == vitoria)
+            {
 
-                if (tecla == ALLEGRO_KEY_ENTER) {
+                if (tecla == ALLEGRO_KEY_ENTER)
+                {
                     vidas = 3;
                     sala_atual = 1;
-                    andar = 0;
-                    na_escada = false;
                     x = PX(100);
                     y = Y_INICIAL;
+
+                    // Volta para o andar de baixo e zera os quizzes resolvidos
+                    andar_cima = false;
+                    escada_estado = 0;
+                    for (int i = 0; i <= TOTAL_QUIZZES; i++)
+                    {
+                        quiz_resolvido[i] = false;
+                    }
 
                     quiz_aberto = false;
                     opcao_selecionada = 0;
                     opcao_respondida = -1;
                     frames_mensagem = 0;
                     frames_tremor = 0;
-                    frames_aviso = 0;
-                    quiz_resolvido[0] = false;
-                    quiz_resolvido[1] = false;
+                    frames_restaurada = 0;
                     estado_atual = ESTADO_MENU;
                 }
 
-                if (tecla == ALLEGRO_KEY_ESCAPE) {
+                if (tecla == ALLEGRO_KEY_ESCAPE)
+                {
                     rodando = false;
                 }
             }
 
             // Durante o jogo
-            else {
+            else
+            {
 
-                if (quiz_aberto) {
+                if (quiz_aberto)
+                {
 
                     // Enquanto a mensagem de resposta aparece, as teclas sao ignoradas
-                    if (frames_mensagem > 0) {
+                    if (frames_mensagem > 0)
+                    {
                         // nada acontece
                     }
 
-                    else if (tecla == ALLEGRO_KEY_UP) {
+                    else if (tecla == ALLEGRO_KEY_UP)
+                    {
                         opcao_selecionada =
                             (opcao_selecionada + 3) % 4;
                     }
 
-                    else if (tecla == ALLEGRO_KEY_DOWN) {
+                    else if (tecla == ALLEGRO_KEY_DOWN)
+                    {
                         opcao_selecionada =
                             (opcao_selecionada + 1) % 4;
                     }
 
-                    else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1) {
+                    else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1)
+                    {
                         opcao_respondida = opcao_selecionada;
 
                         // Inicia a mensagem de 2 segundos
                         frames_mensagem = duracao_mensagem;
 
-                        if (opcao_respondida == quizzes[quiz_atual].resposta_certa) {
+                        if (opcao_respondida == respostas_certas[quiz_atual])
+                        {
                             ultima_resposta_correta = true;
                             quiz_resolvido[quiz_atual] = true;
                             printf("Resposta correta!\n");
-                        } else {
+                        }
+                        else
+                        {
                             ultima_resposta_correta = false;
                             vidas--;
                             frames_tremor = duracao_tremor;
@@ -518,41 +607,87 @@ int main(void)
 
                     else if (
                         tecla == ALLEGRO_KEY_E ||
-                        tecla == ALLEGRO_KEY_ESCAPE
-                    ) {
+                        tecla == ALLEGRO_KEY_ESCAPE)
+                    {
                         quiz_aberto = false;
                     }
                 }
 
-                else {
+                else
+                {
 
-                    if (tecla == ALLEGRO_KEY_ESCAPE) {
+                    if (tecla == ALLEGRO_KEY_ESCAPE)
+                    {
                         rodando = false;
                     }
 
-                    else if (
-                        tecla == ALLEGRO_KEY_E &&
-                        (esta_na_zona || esta_na_zona2)
-                    ) {
-                        // Qual quiz pertence a esta zona
-                        int quiz_da_zona = esta_na_zona ? 0 : 1;
+                    // Enquanto o personagem sobe ou desce a escada, nada mais funciona
+                    else if (escada_estado == 0)
+                    {
 
-                        // Enquanto o aviso esta na tela, a tecla E e ignorada
-                        if (frames_aviso > 0) {
-                            // nada acontece
+                        // Sobe a escada
+                        if (tecla == ALLEGRO_KEY_UP && na_base_escada)
+                        {
+                            escada_estado = 1;
+                            progresso_escada = 0;
+                            x_origem_escada = x;
+                            y_origem_escada = y;
+                            x_destino_escada = x_max_cima;
+                            y_destino_escada = Y_CIMA;
                         }
 
-                        // Quiz ja resolvido: so mostra o aviso por 2 segundos
-                        else if (quiz_resolvido[quiz_da_zona]) {
-                            frames_aviso = duracao_aviso;
+                        // Desce a escada
+                        else if (tecla == ALLEGRO_KEY_DOWN && na_topo_escada)
+                        {
+                            escada_estado = 2;
+                            progresso_escada = 0;
+                            x_origem_escada = x;
+                            y_origem_escada = y;
+                            x_destino_escada = x_pe_escada;
+                            y_destino_escada = Y_INICIAL;
                         }
 
-                        // Quiz ainda nao resolvido: abre o quiz
-                        else {
-                            quiz_atual = quiz_da_zona;
-                            quiz_aberto = true;
-                            opcao_selecionada = 0;
-                            opcao_respondida = -1;
+                        else if (tecla == ALLEGRO_KEY_E)
+                        {
+                            int quiz_alvo = 0;
+
+                            if (sala_atual == 1 && esta_na_zona)
+                            {
+                                quiz_alvo = 1;
+                            }
+                            else if (sala_atual == 1 && esta_na_zona_estante)
+                            {
+                                quiz_alvo = 5;
+                            }
+                            else if (sala_atual == 2 && esta_na_zona_sala2)
+                            {
+                                quiz_alvo = 2;
+                            }
+                            else if (sala_atual == 2 && esta_na_zona_sala2_3)
+                            {
+                                quiz_alvo = 3;
+                            }
+                            else if (sala_atual == 3 && esta_na_zona_sala3_luz)
+                            {
+                                quiz_alvo = 4;
+                            }
+
+                            if (quiz_alvo > 0)
+                            {
+                                // Se o quiz ja foi acertado, exibe "parte restaurada!"
+                                if (quiz_resolvido[quiz_alvo])
+                                {
+                                    frames_restaurada = duracao_mensagem;
+                                }
+                                else
+                                {
+                                    quiz_atual = quiz_alvo;
+                                    quiz_aberto = true;
+                                    opcao_selecionada = 0;
+                                    opcao_respondida = -1;
+                                    frames_restaurada = 0;
+                                }
+                            }
                         }
                     }
                 }
@@ -561,23 +696,27 @@ int main(void)
 
         // ---------------- EVENTOS DO MOUSE ----------------
 
-        else if (evento.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN) {
+        else if (evento.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN)
+        {
 
-            if (estado_atual == ESTADO_MENU) {
+            if (estado_atual == ESTADO_MENU)
+            {
                 // Verifica se clicou no botao iniciar
                 if (
                     evento.mouse.button == 1 &&
                     evento.mouse.x >= botao_x1 &&
                     evento.mouse.x <= botao_x2 &&
                     evento.mouse.y >= botao_y1 &&
-                    evento.mouse.y <= botao_y2
-                ) {
+                    evento.mouse.y <= botao_y2)
+                {
                     estado_atual = ESTADO_HISTORIA;
                 }
             }
 
-            else if (estado_atual == ESTADO_HISTORIA) {
-                if (evento.mouse.button == 1) {
+            else if (estado_atual == ESTADO_HISTORIA)
+            {
+                if (evento.mouse.button == 1)
+                {
                     estado_atual = ESTADO_JOGANDO;
                 }
             }
@@ -585,10 +724,12 @@ int main(void)
 
         // ---------------- ATUALIZACAO DO JOGO ----------------
 
-        if (evento.type == ALLEGRO_EVENT_TIMER) {
+        if (evento.type == ALLEGRO_EVENT_TIMER)
+        {
 
             // Tela inicial
-            if (estado_atual == ESTADO_MENU) {
+            if (estado_atual == ESTADO_MENU)
+            {
 
                 // Fundo da tela inicial
                 al_draw_scaled_bitmap(
@@ -599,81 +740,70 @@ int main(void)
                     0, 0,
                     largura_tela,
                     altura_tela,
-                    0
-                );
+                    0);
 
                 // Escurece o fundo
                 al_draw_filled_rectangle(
                     0, 0,
                     largura_tela, altura_tela,
-                    al_map_rgba(0, 0, 0, 190)
-                );
+                    al_map_rgba(0, 0, 0, 190));
 
                 // Titulo
                 TEXTO(
                     al_map_rgb(219, 198, 167),
                     largura_tela / 2, PY(100),
                     ALLEGRO_ALIGN_CENTRE,
-                    "BIBLIOTECA ESQUECIDA"
-                );
+                    "BIBLIOTECA ESQUECIDA");
 
                 // Subtitulo
                 TEXTO(
                     al_map_rgb(220, 220, 220),
                     largura_tela / 2, PY(155),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Uma aventura entre livros e misterios"
-                );
+                    "Uma aventura entre livros e misterios");
 
                 // Texto de explicacao
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(230),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Explore a biblioteca esquecida"
-                );
+                    "Explore a biblioteca esquecida");
 
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(260),
                     ALLEGRO_ALIGN_CENTRE,
-                    "e descubra os misterios escondidos."
-                );
+                    "e descubra os misterios escondidos.");
 
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(310),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Movimente-se com as SETAS do teclado."
-                );
+                    "Movimente-se com as SETAS do teclado.");
 
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(340),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Pressione E para interagir com objetos."
-                );
+                    "Pressione E para interagir com objetos.");
 
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(370),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Responda ao quiz usando as setas e ENTER."
-                );
+                    "Responda ao quiz usando as setas e ENTER.");
 
                 // Botao iniciar
                 al_draw_filled_rectangle(
                     botao_x1, botao_y1,
                     botao_x2, botao_y2,
-                    al_map_rgb(100, 65, 35)
-                );
+                    al_map_rgb(100, 65, 35));
 
                 al_draw_rectangle(
                     botao_x1, botao_y1,
                     botao_x2, botao_y2,
                     al_map_rgb(255, 220, 150),
-                    ES(3)
-                );
+                    ES(3));
 
                 // Texto centralizado verticalmente no botao
                 TEXTO(
@@ -681,19 +811,18 @@ int main(void)
                     largura_tela / 2,
                     botao_y1 + ((botao_y2 - botao_y1) - ES(8)) / 2,
                     ALLEGRO_ALIGN_CENTRE,
-                    "INICIAR JOGO"
-                );
+                    "INICIAR JOGO");
 
                 TEXTO(
                     al_map_rgb(200, 200, 200),
                     largura_tela / 2, PY(520),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Pressione ENTER ou clique para comecar"
-                );
+                    "Pressione ENTER ou clique para comecar");
             }
 
             // Tela preta da historia
-            else if (estado_atual == ESTADO_HISTORIA) {
+            else if (estado_atual == ESTADO_HISTORIA)
+            {
 
                 al_clear_to_color(al_map_rgb(0, 0, 0));
 
@@ -711,8 +840,10 @@ int main(void)
 
                 // Logica para revelar as linhas gradualmente com o tempo
                 contador_frames++;
-                if (contador_frames >= velocidade_texto) {
-                    if (caracteres_visiveis < total_linhas) {
+                if (contador_frames >= velocidade_texto)
+                {
+                    if (caracteres_visiveis < total_linhas)
+                    {
                         caracteres_visiveis++;
                     }
                     contador_frames = 0;
@@ -722,14 +853,14 @@ int main(void)
                 float y_inicial = PY(120);
                 float espacamento_linha = PY(30);
 
-                for (int i = 0; i < caracteres_visiveis && i < total_linhas; i++) {
+                for (int i = 0; i < caracteres_visiveis && i < total_linhas; i++)
+                {
                     TEXTO(
                         al_map_rgb(230, 230, 230),
                         largura_tela / 2,
                         y_inicial + (i * espacamento_linha),
                         ALLEGRO_ALIGN_CENTRE,
-                        linhas_historia[i]
-                    );
+                        linhas_historia[i]);
                 }
 
                 // Aviso para continuar no rodape
@@ -737,11 +868,11 @@ int main(void)
                     al_map_rgb(180, 180, 180),
                     largura_tela / 2, PY(550),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Pressione ENTER, ESPACO ou clique para continuar"
-                );
+                    "Pressione ENTER, ESPACO ou clique para continuar");
             }
             // ---------------- TELA DE GAME OVER ----------------
-            else if (estado_atual == game_over) {
+            else if (estado_atual == game_over)
+            {
 
                 // Desenha a imagem de fundo
                 al_draw_scaled_bitmap(
@@ -752,22 +883,21 @@ int main(void)
                     0, 0,
                     largura_tela,
                     altura_tela,
-                    0
-                );
+                    0);
 
                 // Escurece a imagem para destacar os textos
                 al_draw_filled_rectangle(
                     0, 0,
                     largura_tela, altura_tela,
-                    al_map_rgba(0, 0, 0, 150)
-                );
+                    al_map_rgba(0, 0, 0, 150));
 
                 // Coracoes no topo (2 cheios e o ultimo quebrado)
                 ALLEGRO_COLOR vermelho = al_map_rgb(230, 50, 80);
                 float inicio_x = largura_tela / 2 - ES(54);
                 float topo_y = PY(130);
 
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < 2; i++)
+                {
                     float cx = inicio_x + (i * ES(40));
                     al_draw_filled_circle(cx + ES(8), topo_y + ES(8), ES(8), vermelho);
                     al_draw_filled_circle(cx + ES(20), topo_y + ES(8), ES(8), vermelho);
@@ -775,8 +905,7 @@ int main(void)
                         cx + ES(1), topo_y + ES(11),
                         cx + ES(27), topo_y + ES(11),
                         cx + ES(14), topo_y + ES(28),
-                        vermelho
-                    );
+                        vermelho);
                 }
 
                 // Coracao quebrado ao lado
@@ -786,71 +915,128 @@ int main(void)
                     qx + ES(1), topo_y + ES(11),
                     qx + ES(12), topo_y + ES(11),
                     qx + ES(11), topo_y + ES(27),
-                    vermelho
-                );
+                    vermelho);
                 al_draw_filled_circle(qx + ES(21), topo_y + ES(8), ES(7), vermelho);
                 al_draw_filled_triangle(
                     qx + ES(16), topo_y + ES(11),
                     qx + ES(27), topo_y + ES(11),
                     qx + ES(17), topo_y + ES(27),
-                    vermelho
-                );
+                    vermelho);
 
                 // Titulo GAME OVER / VOCE MORREU
                 TEXTO(
                     al_map_rgb(255, 210, 40),
                     largura_tela / 2, PY(210),
                     ALLEGRO_ALIGN_CENTRE,
-                    "VOCE MORREU!"
-                );
+                    "VOCE MORREU!");
 
                 // Instrucao para voltar ao inicio
                 TEXTO(
                     al_map_rgb(255, 255, 255),
                     largura_tela / 2, PY(310),
                     ALLEGRO_ALIGN_CENTRE,
-                    "VOLTAR AO INICIO?"
-                );
+                    "VOLTAR AO INICIO?");
 
                 TEXTO(
                     al_map_rgb(200, 200, 200),
                     largura_tela / 2, PY(355),
                     ALLEGRO_ALIGN_CENTRE,
-                    "Pressione ENTER para voltar ao inicio"
-                );
+                    "Pressione ENTER para voltar ao inicio");
+            }
+
+            else if (estado_atual == vitoria)
+            {
+                al_draw_scaled_bitmap(
+                    imagem_vitoria,
+                    0, 0,
+                    al_get_bitmap_width(imagem_vitoria),
+                    al_get_bitmap_height(imagem_vitoria),
+                    0, 0,
+                    largura_tela, altura_tela,
+                    0);
+
+                // Escurece levemente para destacar o texto de vitoria
+                al_draw_filled_rectangle(
+                    0, 0,
+                    largura_tela, altura_tela,
+                    al_map_rgba(0, 0, 0, 120));
+
+                TEXTO(
+                    al_map_rgb(255, 220, 80),
+                    largura_tela / 2, PY(180),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "VOCE VENCEU!");
+
+                TEXTO(
+                    al_map_rgb(255, 255, 255),
+                    largura_tela / 2, PY(240),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Os 4 enigmas foram resolvidos corretamente!");
+
+                TEXTO(
+                    al_map_rgb(255, 255, 255),
+                    largura_tela / 2, PY(275),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "A biblioteca foi reconstruida!");
+
+                TEXTO(
+                    al_map_rgb(200, 200, 200),
+                    largura_tela / 2, PY(355),
+                    ALLEGRO_ALIGN_CENTRE,
+                    "Pressione ENTER para voltar ao inicio");
             }
 
             // Jogo
-            else {
+            else
+            {
+                if (frames_restaurada > 0)
+                {
+                    frames_restaurada--;
+                }
 
                 // Contagem da mensagem de resposta (2 segundos)
-                if (frames_mensagem > 0) {
+                if (frames_mensagem > 0)
+                {
                     frames_mensagem--;
 
                     // Quando a mensagem termina, o quiz fecha junto
-                    if (frames_mensagem == 0) {
+                    if (frames_mensagem == 0)
+                    {
                         quiz_aberto = false;
 
                         // Se acabaram as vidas, vai para o game over
-                        if (vidas <= 0) {
+                        if (vidas <= 0)
+                        {
                             estado_atual = game_over;
+                        }
+                        else
+                        {
+                            // Conta quantos enigmas foram resolvidos corretamente
+                            int enigmas_resolvidos = 0;
+
+                            for (int i = 1; i <= TOTAL_QUIZZES; i++)
+                            {
+                                if (quiz_resolvido[i])
+                                {
+                                    enigmas_resolvidos++;
+                                }
+                            }
+
+                            // Ao resolver os 4 enigmas corretamente, exibe a tela de vitoria
+                            if (enigmas_resolvidos >= ENIGMAS_PARA_VITORIA)
+                            {
+                                estado_atual = vitoria;
+                            }
                         }
                     }
                 }
-
-                // Contagem do aviso "Parte organizada" (2 segundos)
-                if (frames_aviso > 0) {
-                    frames_aviso--;
-                }
-
-                // A sala 2 so e liberada depois de resolver pelo menos 1 enigma
-                bool sala2_liberada = quiz_resolvido[0] || quiz_resolvido[1];
 
                 // Calcula o tremor de tela (diminui aos poucos ate parar)
                 float tremor_x = 0;
                 float tremor_y = 0;
 
-                if (frames_tremor > 0) {
+                if (frames_tremor > 0)
+                {
                     float forca = ES(8) * frames_tremor / duracao_tremor;
 
                     tremor_x = ((rand() % 201) - 100) / 100.0f * forca;
@@ -865,171 +1051,180 @@ int main(void)
                 al_translate_transform(&tremor, tremor_x, tremor_y);
                 al_use_transform(&tremor);
 
-                // ---------------- MOVIMENTO DO PERSONAGEM ----------------
-                if (!quiz_aberto) {
+                // Verifica desbloqueios das salas
+                bool sala1_desbloqueou_sala2 = quiz_resolvido[1] || quiz_resolvido[5];
+                bool sala2_desbloqueou_sala3 = quiz_resolvido[2] || quiz_resolvido[3];
 
-                    ALLEGRO_KEYBOARD_STATE key_state;
-                    al_get_keyboard_state(&key_state);
+                // Movimento do personagem
+                if (!quiz_aberto)
+                {
 
-                    bool tecla_esq = al_key_down(&key_state, ALLEGRO_KEY_LEFT);
-                    bool tecla_dir = al_key_down(&key_state, ALLEGRO_KEY_RIGHT);
-                    bool tecla_cima = al_key_down(&key_state, ALLEGRO_KEY_UP);
-                    bool tecla_baixo = al_key_down(&key_state, ALLEGRO_KEY_DOWN);
+                    // Animacao de subir/descer a escada
+                    if (escada_estado != 0)
+                    {
+                        progresso_escada += 1.0f / duracao_escada;
 
-                    // ----- Subindo ou descendo a escada -----
-                    if (sala_atual == 1 && na_escada) {
-
-                        float centro = x + tamanho / 2;
-                        float sentido = 0;
-
-                        // DIREITA/CIMA sobem, ESQUERDA/BAIXO descem
-                        if (tecla_dir || tecla_cima) {
-                            sentido += 1;
-                        }
-                        if (tecla_esq || tecla_baixo) {
-                            sentido -= 1;
+                        if (progresso_escada > 1.0f)
+                        {
+                            progresso_escada = 1.0f;
                         }
 
-                        centro += sentido * velo;
+                        // O personagem anda em diagonal entre o ponto de origem e o destino
+                        x = x_origem_escada + (x_destino_escada - x_origem_escada) * progresso_escada;
+                        y = y_origem_escada + (y_destino_escada - y_origem_escada) * progresso_escada;
 
-                        // Chegou no topo: fica no andar de cima
-                        if (centro >= escada_x2) {
-                            centro = escada_x2;
-                            na_escada = false;
-                            andar = 1;
-                        }
-
-                        // Chegou na base: volta para o terreo
-                        else if (centro <= escada_x1) {
-                            centro = escada_x1;
-                            na_escada = false;
-                            andar = 0;
-                        }
-
-                        x = centro - tamanho / 2;
-
-                        if (na_escada) {
-                            y = pes_na_escada(
-                                    centro,
-                                    escada_x1, escada_x2,
-                                    pes_chao, pes_cima
-                                ) - tamanho;
-                        } else {
-                            y = (andar == 1) ? Y_CIMA : Y_INICIAL;
+                        // Chegou ao fim da escada
+                        if (progresso_escada >= 1.0f)
+                        {
+                            andar_cima = (escada_estado == 1);
+                            escada_estado = 0;
                         }
                     }
 
-                    // ----- Andando normalmente -----
-                    else {
+                    // Movimento normal (somente no eixo x)
+                    else
+                    {
 
-                        if (tecla_esq) {
+                        ALLEGRO_KEYBOARD_STATE key_state;
+                        al_get_keyboard_state(&key_state);
+
+                        // Na varanda o limite da direita e o topo da escada
+                        float limite_direito = andar_cima ? x_max_cima : largura_tela - tamanho;
+
+                        if (al_key_down(&key_state, ALLEGRO_KEY_LEFT))
+                        {
                             x -= velo;
 
-                            if (x < 0) {
+                            if (x < 0)
+                            {
                                 x = 0;
                             }
                         }
 
-                        if (tecla_dir) {
+                        if (al_key_down(&key_state, ALLEGRO_KEY_RIGHT))
+                        {
                             x += velo;
 
-                            if (x + tamanho > largura_tela) {
-                                x = largura_tela - tamanho;
+                            if (x > limite_direito)
+                            {
+                                x = limite_direito;
                             }
                         }
 
-                        // O andar de cima termina no topo da escada
-                        if (
-                            sala_atual == 1 &&
-                            andar == 1 &&
-                            x + tamanho / 2 > escada_x2
-                        ) {
-                            x = escada_x2 - tamanho / 2;
-                        }
+                        // Garante que o personagem fique sempre na altura do andar atual
+                        y = andar_cima ? Y_CIMA : Y_INICIAL;
 
-                        // Altura do personagem de acordo com o andar
-                        y = (sala_atual == 1 && andar == 1) ? Y_CIMA : Y_INICIAL;
-
-                        // Entrar na escada
-                        if (sala_atual == 1) {
-
-                            float centro = x + tamanho / 2;
-
-                            // Perto da base: CIMA para subir
+                        // Troca de sala (so acontece no andar de baixo)
+                        if (!andar_cima)
+                        {
+                            // Sala 1 para Sala 2 (bloqueada ate resolver um enigma da Sala 1)
                             if (
-                                andar == 0 &&
-                                tecla_cima &&
-                                fabsf(centro - escada_x1) <= margem_escada
-                            ) {
-                                na_escada = true;
-                                x = escada_x1 + 1 - tamanho / 2;
+                                sala_atual == 1 &&
+                                x + tamanho >= largura_tela)
+                            {
+                                if (sala1_desbloqueou_sala2)
+                                {
+                                    sala_atual = 2;
+                                    x = margem_entrada;
+                                }
+                                else
+                                {
+                                    x = largura_tela - tamanho;
+                                }
                             }
 
-                            // Perto do topo: BAIXO para descer
                             else if (
-                                andar == 1 &&
-                                tecla_baixo &&
-                                centro >= escada_x2 - margem_escada
-                            ) {
-                                na_escada = true;
-                                x = escada_x2 - 1 - tamanho / 2;
+                                sala_atual == 2 &&
+                                x <= 0)
+                            {
+                                sala_atual = 1;
+                                x = largura_tela - tamanho - margem_entrada;
+                            }
+                            // Sala 2 para Sala 3 (bloqueada ate resolver um enigma da Sala 2)
+                            else if (sala_atual == 2 && x + tamanho >= largura_tela)
+                            {
+                                if (sala2_desbloqueou_sala3)
+                                {
+                                    sala_atual = 3;
+                                    x = margem_entrada;
+                                }
+                                else
+                                {
+                                    x = largura_tela - tamanho;
+                                }
                             }
 
-                            if (na_escada) {
-                                y = pes_na_escada(
-                                        x + tamanho / 2,
-                                        escada_x1, escada_x2,
-                                        pes_chao, pes_cima
-                                    ) - tamanho;
+                            // Sala 3 para Sala 2
+                            else if (sala_atual == 3 && x <= 0)
+                            {
+                                sala_atual = 2;
+                                x = largura_tela - tamanho - margem_entrada;
                             }
-                        }
-
-                        // Troca de sala (a sala 2 so abre com 1 enigma resolvido)
-                        if (
-                            sala_atual == 1 &&
-                            sala2_liberada &&
-                            x + tamanho >= largura_tela
-                        ) {
-                            sala_atual = 2;
-                            andar = 0;
-                            na_escada = false;
-                            x = margem_entrada;
-                        }
-
-                        else if (
-                            sala_atual == 2 &&
-                            x <= 0
-                        ) {
-                            sala_atual = 1;
-                            andar = 0;
-                            na_escada = false;
-                            x = largura_tela - tamanho - margem_entrada;
                         }
                     }
                 }
 
-                // Verifica colisao com a zona do bau
-                esta_na_zona = (
-                    sala_atual == 1 &&
-                    x < zona_x + zona_largura &&
-                    x + tamanho > zona_x &&
-                    y < zona_y + zona_altura &&
-                    y + tamanho > zona_y
-                );
+                // Verifica se o personagem esta na borda bloqueada da Sala 1 ou Sala 2
+                passagem_sala2_bloqueada = (sala_atual == 1 &&
+                                            !andar_cima &&
+                                            !sala1_desbloqueou_sala2 &&
+                                            x + tamanho >= largura_tela - PX(5));
 
-                // Verifica colisao com a zona do andar de cima
-                esta_na_zona2 = (
-                    sala_atual == 1 &&
-                    andar == 1 &&
-                    !na_escada &&
-                    x < zona2_x + zona2_largura &&
-                    x + tamanho > zona2_x &&
-                    y < zona2_y + zona2_altura &&
-                    y + tamanho > zona2_y
-                );
+                passagem_sala3_bloqueada = (sala_atual == 2 &&
+                                            !andar_cima &&
+                                            !sala2_desbloqueou_sala3 &&
+                                            x + tamanho >= largura_tela - PX(5));
+
+                // Verifica se o personagem esta na escada
+                na_base_escada = (sala_atual == 1 &&
+                                  !andar_cima &&
+                                  escada_estado == 0 &&
+                                  x < escada_base_x + escada_base_largura &&
+                                  x + tamanho > escada_base_x);
+
+                na_topo_escada = (sala_atual == 1 &&
+                                  andar_cima &&
+                                  escada_estado == 0 &&
+                                  x >= x_topo_escada_min);
+
+                // Verifica colisao com o bau no andar de baixo
+                esta_na_zona = (sala_atual == 1 &&
+                                !andar_cima &&
+                                escada_estado == 0 &&
+                                x < zona_x + zona_largura &&
+                                x + tamanho > zona_x &&
+                                y < zona_y + zona_altura &&
+                                y + tamanho > zona_y);
+
+                // Verifica colisao com a estante da varanda (so la em cima)
+                esta_na_zona_estante = (sala_atual == 1 &&
+                                        andar_cima &&
+                                        escada_estado == 0 &&
+                                        x < zona5_x + zona5_largura &&
+                                        x + tamanho > zona5_x &&
+                                        y < zona5_y + zona5_altura &&
+                                        y + tamanho > zona5_y);
+
+                // Verifica colisao com a zona da Sala 2
+                esta_na_zona_sala2 = (sala_atual == 2 &&
+                                      x < zona2_x + zona2_largura &&
+                                      x + tamanho > zona2_x &&
+                                      y < zona2_y + zona2_altura &&
+                                      y + tamanho > zona2_y);
+                esta_na_zona_sala2_3 = (sala_atual == 2 &&
+                                        x < zona3_x + zona3_largura &&
+                                        x + tamanho > zona3_x &&
+                                        y < zona3_y + zona3_altura &&
+                                        y + tamanho > zona3_y);
+                esta_na_zona_sala3_luz = (sala_atual == 3 &&
+                                          x < zona4_x + zona4_largura &&
+                                          x + tamanho > zona4_x &&
+                                          y < zona4_y + zona4_altura &&
+                                          y + tamanho > zona4_y);
 
                 // Desenha o fundo
-                if (sala_atual == 1) {
+                if (sala_atual == 1)
+                {
 
                     al_draw_scaled_bitmap(
                         imagem_sala1,
@@ -1039,11 +1234,11 @@ int main(void)
                         0, 0,
                         largura_tela,
                         altura_tela,
-                        0
-                    );
+                        0);
                 }
 
-                else {
+                else if (sala_atual == 2)
+                {
                     al_draw_scaled_bitmap(
                         imagem_sala2,
                         0, 0,
@@ -1052,44 +1247,25 @@ int main(void)
                         0, 0,
                         largura_tela,
                         altura_tela,
-                        0
-                    );
+                        0);
+                }
+                else if (sala_atual == 3)
+                {
+                    al_draw_scaled_bitmap(
+                        imagem_sala3,
+                        0, 0,
+                        al_get_bitmap_width(imagem_sala3),
+                        al_get_bitmap_height(imagem_sala3),
+                        0, 0,
+                        largura_tela,
+                        altura_tela,
+                        0);
                 }
 
-                // Desenha as zonas de interacao
-                if (sala_atual == 1) {
-
-                    // Zona do bau
-                    al_draw_rectangle(
-                        zona_x, zona_y,
-                        zona_x + zona_largura,
-                        zona_y + zona_altura,
-                        al_map_rgb(0, 0, 255),
-                        ES(2)
-                    );
-
-                    // Zona do andar de cima
-                    al_draw_rectangle(
-                        zona2_x, zona2_y,
-                        zona2_x + zona2_largura,
-                        zona2_y + zona2_altura,
-                        al_map_rgb(0, 0, 255),
-                        ES(2)
-                    );
-
-                    #if DEBUG_ESCADA
-                    // Linha da escada (verde) e do andar de cima (azul claro)
-                    al_draw_line(
-                        escada_x1, pes_chao,
-                        escada_x2, pes_cima,
-                        al_map_rgb(0, 255, 0), ES(2)
-                    );
-                    al_draw_line(
-                        0, pes_cima,
-                        escada_x2, pes_cima,
-                        al_map_rgb(0, 255, 255), ES(2)
-                    );
-                    #endif
+                // Desenha o bau no andar de baixo da sala 1 (sem quadrados azuis)
+                if (sala_atual == 1)
+                {
+                    desenha_bau(zona_x, zona_y, zona_largura, zona_altura, esc);
                 }
 
                 // Desenha o personagem
@@ -1097,78 +1273,130 @@ int main(void)
                     x, y,
                     x + tamanho,
                     y + tamanho,
-                    al_map_rgb(200, 200, 0)
-                );
+                    al_map_rgb(200, 200, 0));
 
-                // Mensagens de interacao (uma de cada vez)
-                if (!quiz_aberto && frames_aviso == 0) {
+                // Mensagens no topo da tela
+                if (!quiz_aberto)
+                {
+                    // Se tentou avancar para a Sala 2 antes de resolver um enigma da Sala 1
+                    if (passagem_sala2_bloqueada)
+                    {
+                        float ax1 = PX(120);
+                        float ay1 = PY(90);
+                        float ax2 = PX(680);
+                        float ay2 = PY(155);
 
-                    float centro_atual = x + tamanho / 2;
+                        al_draw_filled_rectangle(
+                            ax1, ay1, ax2, ay2,
+                            al_map_rgba(60, 15, 15, 220));
+                        al_draw_rectangle(
+                            ax1, ay1, ax2, ay2,
+                            al_map_rgb(255, 180, 60),
+                            ES(2));
 
-                    bool perto_da_base =
-                        sala_atual == 1 &&
-                        !na_escada &&
-                        andar == 0 &&
-                        fabsf(centro_atual - escada_x1) <= margem_escada;
+                        TEXTO(
+                            al_map_rgb(255, 210, 80),
+                            largura_tela / 2, ay1 + PY(12),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "ALERTA: Passagem para a Sala 2 bloqueada!");
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, ay1 + PY(36),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Resolva o enigma do bau ou da estante antes de avancar.");
+                    }
+                    else if (passagem_sala3_bloqueada)
+                    {
+                        float ax1 = PX(120);
+                        float ay1 = PY(90);
+                        float ax2 = PX(680);
+                        float ay2 = PY(155);
 
-                    bool perto_do_topo =
-                        sala_atual == 1 &&
-                        !na_escada &&
-                        andar == 1 &&
-                        centro_atual >= escada_x2 - margem_escada;
+                        al_draw_filled_rectangle(
+                            ax1, ay1, ax2, ay2,
+                            al_map_rgba(60, 15, 15, 220));
+                        al_draw_rectangle(
+                            ax1, ay1, ax2, ay2,
+                            al_map_rgb(255, 180, 60),
+                            ES(2));
 
-                    if (esta_na_zona) {
+                        TEXTO(
+                            al_map_rgb(255, 210, 80),
+                            largura_tela / 2, ay1 + PY(12),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "ALERTA: Passagem para a Sala 3 bloqueada!");
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, ay1 + PY(36),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Resolva um enigma da Sala 2 antes de avancar.");
+                    }
+
+                    // Mensagem de "parte restaurada!" ou dica de interacao
+                    if (frames_restaurada > 0)
+                    {
+                        TEXTO(
+                            al_map_rgb(120, 255, 120),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "parte restaurada!");
+                    }
+                    else if (esta_na_zona)
+                    {
                         TEXTO(
                             al_map_rgb(255, 255, 255),
                             largura_tela / 2, PY(50),
                             ALLEGRO_ALIGN_CENTRE,
-                            "Pressione [E] para interagir com o bau!"
-                        );
+                            "aperte E para interagir com o bau");
                     }
-
-                    else if (esta_na_zona2) {
+                    else if (esta_na_zona_estante)
+                    {
                         TEXTO(
                             al_map_rgb(255, 255, 255),
                             largura_tela / 2, PY(50),
                             ALLEGRO_ALIGN_CENTRE,
-                            "Pressione [E] para interagir!"
-                        );
+                            "aperte E para interagir com a estante");
                     }
-
-                    else if (perto_da_base) {
+                    else if (na_base_escada)
+                    {
                         TEXTO(
                             al_map_rgb(255, 255, 255),
                             largura_tela / 2, PY(50),
                             ALLEGRO_ALIGN_CENTRE,
-                            "Pressione [CIMA] para subir a escada"
-                        );
+                            "Pressione [CIMA] para subir a escada!");
                     }
-
-                    else if (perto_do_topo) {
+                    else if (na_topo_escada)
+                    {
                         TEXTO(
                             al_map_rgb(255, 255, 255),
                             largura_tela / 2, PY(50),
                             ALLEGRO_ALIGN_CENTRE,
-                            "Pressione [BAIXO] para descer a escada"
-                        );
+                            "Pressione [BAIXO] para descer a escada!");
                     }
-                }
-
-                // Avisa que a passagem esta bloqueada (so no terreo da sala 1)
-                if (
-                    !quiz_aberto &&
-                    sala_atual == 1 &&
-                    andar == 0 &&
-                    !na_escada &&
-                    !sala2_liberada &&
-                    x + tamanho >= largura_tela
-                ) {
-                    TEXTO(
-                        al_map_rgb(255, 180, 80),
-                        largura_tela / 2, PY(80),
-                        ALLEGRO_ALIGN_CENTRE,
-                        "Resolva pelo menos um enigma para avancar!"
-                    );
+                    else if (esta_na_zona_sala2)
+                    {
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Pressione [E] para interagir com o livro!");
+                    }
+                    else if (esta_na_zona_sala2_3)
+                    {
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Pressione [E] para examinar o vaso!");
+                    }
+                    else if (esta_na_zona_sala3_luz)
+                    {
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Pressione [E] para interagir com a luz!");
+                    }
                 }
 
                 // Mostra a sala atual
@@ -1179,123 +1407,211 @@ int main(void)
                     al_map_rgb(255, 255, 255),
                     PX(10), PY(10),
                     0,
-                    texto_sala
-                );
+                    texto_sala);
 
                 // Desenha os coracoes de vida (canto superior direito)
-                for (int i = 0; i < vidas; i++) {
+                for (int i = 0; i < vidas; i++)
+                {
                     float hx = PX(700) + (i * ES(25));
                     float hy = PY(15);
 
                     desenha_coracao(hx, hy, esc, al_map_rgb(255, 0, 0));
                 }
 
-                // ---------------- AVISO "PARTE ORGANIZADA" ----------------
-
-                if (frames_aviso > 0) {
-
-                    float centro_x = largura_tela / 2;
-                    float centro_y = altura_tela / 2;
-                    float meia_largura = PX(150);
-                    float meia_altura = PY(40);
-
-                    // Janela do aviso
-                    al_draw_filled_rectangle(
-                        centro_x - meia_largura, centro_y - meia_altura,
-                        centro_x + meia_largura, centro_y + meia_altura,
-                        al_map_rgb(40, 40, 60)
-                    );
-
-                    al_draw_rectangle(
-                        centro_x - meia_largura, centro_y - meia_altura,
-                        centro_x + meia_largura, centro_y + meia_altura,
-                        al_map_rgb(255, 255, 255),
-                        ES(3)
-                    );
-
-                    // Texto com o dobro do tamanho normal, centralizado na janela
-                    desenha_texto(
-                        fonte,
-                        al_map_rgb(120, 255, 120),
-                        centro_x, centro_y - ES(8),
-                        ALLEGRO_ALIGN_CENTRE,
-                        esc * 2,
-                        "Parte organizada"
-                    );
-                }
-
                 // ---------------- TELA DO QUIZ ----------------
 
-                if (quiz_aberto) {
+                if (quiz_aberto == 1)
+                {
 
-                    const Quiz *quiz = &quizzes[quiz_atual];
-
-                    float jx1 = PX(150);
-                    float jy1 = PY(100);
-                    float jx2 = PX(650);
-                    float jy2 = PY(450);
+                    float jx1 = PX(60);
+                    float jy1 = PY(60);
+                    float jx2 = PX(740);
+                    float jy2 = PY(540);
 
                     // Escurece o fundo
                     al_draw_filled_rectangle(
                         0, 0,
                         largura_tela, altura_tela,
-                        al_map_rgba(0, 0, 0, 150)
-                    );
+                        al_map_rgba(0, 0, 0, 150));
 
                     // Painel do quiz
                     al_draw_filled_rectangle(
                         jx1, jy1, jx2, jy2,
-                        al_map_rgb(40, 40, 60)
-                    );
+                        al_map_rgb(40, 40, 60));
 
                     al_draw_rectangle(
                         jx1, jy1, jx2, jy2,
                         al_map_rgb(255, 255, 255),
-                        ES(3)
-                    );
+                        ES(3));
 
                     // Titulo
                     TEXTO(
                         al_map_rgb(255, 220, 80),
                         (jx1 + jx2) / 2, jy1 + PY(20),
                         ALLEGRO_ALIGN_CENTRE,
-                        "QUIZ"
-                    );
+                        "QUIZ");
 
-                    // Linhas da pergunta
-                    for (int i = 0; i < quiz->num_linhas; i++) {
-                        TEXTO(
-                            al_map_rgb(255, 255, 255),
-                            (jx1 + jx2) / 2, jy1 + PY(60) + i * PY(22),
-                            ALLEGRO_ALIGN_CENTRE,
-                            quiz->pergunta[i]
-                        );
+                    // Perguntas
+                    if (quiz_atual == 1)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Em uma manhã, o sol simplesmente desapareceu");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "e uma chuva de pedras e cinzas cobriu a cidade,");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "congelando a vida dos moradores por quase dois mil anos.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "O que causou isso?");
+                    }
+                    else if (quiz_atual == 2)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Dois imperios superpoderosos investiram");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "bilhoes de dolares e reuniram os melhores cientistas");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "para chegar a um lugar onde ninguem jamais esteve.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Que disputa foi essa?");
+                    }
+                    else if (quiz_atual == 3)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Em 1914, um acontecimento envolvendo o herdeiro");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "do Imperio Austro-Hungaro contribuiu para o inicio");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "de um grande conflito na Europa.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "O que mudou o rumo da historia mundial?");
+                    }
+                    else if (quiz_atual == 4)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Um exercito fingiu desistir de uma guerra de dez anos");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "e deixou um grande presente na porta da cidade inimiga.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "Os moradores aceitaram o presente e comemoraram,");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "mas naquela noite a cidade foi destruida.");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(148),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "O que aconteceu?");
+                    }
+                    else if (quiz_atual == 5)
+                    {
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(60),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "A maior e mais luxuosa embarcacao de sua epoca,");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(82),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "considerada praticamente inquebravel, afundou");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(104),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "em sua viagem inaugural, matando mais de 1.500");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(126),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "pessoas em aguas congelantes, mesmo apos avisos");
+
+                        TEXTO(al_map_rgb(255, 255, 255),
+                              (jx1 + jx2) / 2, jy1 + PY(148),
+                              ALLEGRO_ALIGN_CENTRE,
+                              "de perigo na rota. O que aconteceu?");
                     }
 
                     // Alternativas
-                    for (int i = 0; i < 4; i++) {
+                    const char **alternativas_atuais = alternativas;
 
-                        float oy = jy1 + PY(150) + i * PY(40);
+                    if (quiz_atual == 1)
+                        alternativas_atuais = alternativas;
+                    else if (quiz_atual == 2)
+                        alternativas_atuais = alternativas2;
+                    else if (quiz_atual == 3)
+                        alternativas_atuais = alternativas3;
+                    else if (quiz_atual == 4)
+                        alternativas_atuais = alternativas4;
+                    else if (quiz_atual == 5)
+                        alternativas_atuais = alternativas5;
+
+                    for (int i = 0; i < 4; i++)
+                    {
+
+                        float oy = jy1 + PY(180) + i * PY(45);
 
                         ALLEGRO_COLOR cor_texto =
                             al_map_rgb(200, 200, 200);
 
-                        if (i == opcao_selecionada) {
+                        if (i == opcao_selecionada)
+                        {
 
                             // Cor do destaque: azul normal, verde se acertou, vermelho se errou
                             ALLEGRO_COLOR cor_destaque = al_map_rgb(70, 70, 120);
 
-                            if (frames_mensagem > 0) {
+                            if (frames_mensagem > 0)
+                            {
                                 cor_destaque = ultima_resposta_correta
-                                    ? al_map_rgb(40, 120, 60)
-                                    : al_map_rgb(140, 40, 40);
+                                                   ? al_map_rgb(40, 120, 60)
+                                                   : al_map_rgb(140, 40, 40);
                             }
 
                             al_draw_filled_rectangle(
                                 jx1 + PX(30), oy - PY(8),
                                 jx2 - PX(30), oy + PY(22),
-                                cor_destaque
-                            );
+                                cor_destaque);
 
                             cor_texto =
                                 al_map_rgb(255, 255, 255);
@@ -1305,20 +1621,20 @@ int main(void)
                             cor_texto,
                             jx1 + PX(50), oy,
                             0,
-                            quiz->alternativas[i]
-                        );
+                            alternativas_atuais[i]);
                     }
 
                     // Mensagem de resposta (aparece por 2 segundos)
-                    if (frames_mensagem > 0) {
+                    if (frames_mensagem > 0)
+                    {
 
                         const char *mensagem = ultima_resposta_correta
-                            ? "Resposta correta!"
-                            : "Resposta errada...";
+                                                   ? "Resposta correta!"
+                                                   : "Resposta errada...";
 
                         ALLEGRO_COLOR cor_mensagem = ultima_resposta_correta
-                            ? al_map_rgb(120, 255, 120)
-                            : al_map_rgb(255, 90, 90);
+                                                         ? al_map_rgb(120, 255, 120)
+                                                         : al_map_rgb(255, 90, 90);
 
                         // Texto com o dobro do tamanho normal
                         desenha_texto(
@@ -1327,18 +1643,17 @@ int main(void)
                             (jx1 + jx2) / 2, jy2 - PY(45),
                             ALLEGRO_ALIGN_CENTRE,
                             esc * 2,
-                            mensagem
-                        );
+                            mensagem);
                     }
 
                     // Instrucoes (somem enquanto a mensagem esta na tela)
-                    else {
+                    else
+                    {
                         TEXTO(
                             al_map_rgb(180, 180, 180),
                             (jx1 + jx2) / 2, jy2 - PY(35),
                             ALLEGRO_ALIGN_CENTRE,
-                            "[CIMA/BAIXO] escolher  [ENTER] responder  [E/ESC] fechar"
-                        );
+                            "[CIMA/BAIXO] escolher  [ENTER] responder  [E/ESC] fechar");
                     }
                 }
 
@@ -1357,7 +1672,9 @@ int main(void)
     al_destroy_font(fonte);
     al_destroy_bitmap(imagem_sala2);
     al_destroy_bitmap(imagem_sala1);
+    al_destroy_bitmap(imagem_sala3);
     al_destroy_bitmap(imagem_game_over);
+    al_destroy_bitmap(imagem_vitoria);
     al_destroy_event_queue(fila);
     al_destroy_timer(timer);
     al_destroy_display(janela);
