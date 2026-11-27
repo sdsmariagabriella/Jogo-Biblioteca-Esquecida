@@ -258,10 +258,10 @@ int main(void)
     int opcao_respondida = -1;
 
     const char *alternativas[4] = {
-        "A) Cavalo de Troia",
-        "B) Guerra dos Cem Anos",
-        "C) Muralha de Troia",
-        "D) Mitologia Romana"
+    "A) Um grande terremoto",
+    "B) A erupcao do Monte Vesuvio",
+    "C) Uma grande inundacao",
+    "D) Um incendio na cidade"
     };
 
     // ---------------- ESTADOS DO JOGO ----------------
@@ -361,7 +361,7 @@ int main(void)
                     else if (tecla == ALLEGRO_KEY_ENTER && opcao_respondida == -1) {
                         opcao_respondida = opcao_selecionada;
 
-                        if (opcao_respondida == 0) {
+                        if (opcao_respondida == 1) {
                             printf("Resposta correta!\n");
                         } else {
                             vidas--;
@@ -829,18 +829,34 @@ int main(void)
                         "QUIZ"
                     );
 
-                    // Pergunta
+                    // Pergunta - primeira linha
                     TEXTO(
                         al_map_rgb(255, 255, 255),
                         (jx1 + jx2) / 2, jy1 + PY(60),
                         ALLEGRO_ALIGN_CENTRE,
-                        "Qual foi a estrategia usada para invadir Troia?"
+                        "Em uma manha, o sol simplesmente desapareceu"
+                    );
+
+                    // Segunda linha
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        (jx1 + jx2) / 2, jy1 + PY(82),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "e uma chuva de pedras e cinzas cobriu a cidade,"
+                    );
+
+                    // Terceira linha
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        (jx1 + jx2) / 2, jy1 + PY(104),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "congelando a vida dos moradores por quase dois mil anos. O que causou isso?"
                     );
 
                     // Alternativas
                     for (int i = 0; i < 4; i++) {
 
-                        float oy = jy1 + PY(110) + i * PY(40);
+                        float oy = jy1 + PY(150) + i * PY(40);
 
                         ALLEGRO_COLOR cor_texto =
                             al_map_rgb(200, 200, 200);
