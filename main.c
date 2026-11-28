@@ -12,6 +12,8 @@ typedef enum
 {
     ESTADO_MENU,
     ESTADO_HISTORIA,
+    ESTADO_ENVELOPE,
+    ESTADO_FLORESTA,
     ESTADO_JOGANDO,
     game_over,
     vitoria
@@ -45,6 +47,47 @@ typedef enum
 // Quantidade de enigmas resolvidos necessarios para vencer o jogo
 #define ENIGMAS_PARA_VITORIA 4
 
+// ---------------------------------------------------------------
+// SPRITES DO PERSONAGEM
+//
+// Os 8 desenhos (64x64) ficam na pasta img/boneco/ com estes nomes:
+//
+//   boneco_de_frente.png                  -> parado / descendo a escada
+//   boneco_de_costas.png                  -> subindo a escada
+//   boneco_geral_direita_0001..0003.png   -> andando para a direita
+//   boneco_andando_para_esquerda_1..3.png -> andando para a esquerda
+//
+// Posicoes de cada desenho dentro do vetor "sprites":
+//   0 = frente, 1 = costas, 2..4 = direita, 5..7 = esquerda
+// ---------------------------------------------------------------
+
+#define TOTAL_SPRITES 8
+#define SPRITE_FRENTE 0
+#define SPRITE_COSTAS 1
+#define SPRITE_DIREITA 2  // primeiro desenho de andar para a direita (2, 3, 4)
+#define SPRITE_ESQUERDA 5 // primeiro desenho de andar para a esquerda (5, 6, 7)
+
+// Quantos desenhos tem o ciclo de andar de cada lado
+#define TOTAL_FRAMES_ANDAR 3
+
+// Parte de baixo do quadro 64x64 que fica vazia embaixo dos pes
+// (cerca de 12 pixels de 64)
+#define MARGEM_INFERIOR_SPRITE (12.0f / 64.0f)
+
+// Quantos ticks (1/60 s) cada desenho da animacao de andar fica na tela
+#define TICKS_POR_FRAME_ANIM 8
+
+// Nome do arquivo de cada desenho, na mesma ordem do vetor "sprites"
+static const char *ARQUIVOS_SPRITES[TOTAL_SPRITES] = {
+    "img/boneco/boneco_de_frente.png",
+    "img/boneco/boneco_de_costas.png",
+    "img/boneco/boneco_geral_direita_0001.png",
+    "img/boneco/boneco_geral_direita_0002.png",
+    "img/boneco/boneco_geral_direita_0003.png",
+    "img/boneco/boneco_andando_para_esquerda_1.png",
+    "img/boneco/boneco_andando_para_esquerda_2.png",
+    "img/boneco/boneco_andando_para_esquerda_3.png"};
+
 // Desenha texto escalado (a fonte padrao tem tamanho fixo de 8 pixels,
 // entao usamos uma transformacao para ela acompanhar o tamanho da tela).
 // A transformacao atual (ex: tremor de tela) e combinada com a escala,
@@ -74,6 +117,109 @@ static void desenha_texto(
 // Atalho para desenhar texto usando a fonte e a escala da main
 #define TEXTO(cor, x, y, flags, str) \
     desenha_texto(fonte, (cor), (x), (y), (flags), esc * 1.5f, (str))
+
+// Desenha uma imagem esticada na tela inteira com transparencia
+// (alfa vai de 0.0 = invisivel ate 1.0 = totalmente visivel).
+// Os quatro canais recebem o mesmo valor porque o Allegro 5 usa
+// alfa pre-multiplicado.
+static void desenha_imagem_tela(
+    ALLEGRO_BITMAP *img,
+    float alfa,
+    float largura,
+    float altura)
+{
+    al_draw_tinted_scaled_bitmap(
+        img,
+        al_map_rgba_f(alfa, alfa, alfa, alfa),
+        0, 0,
+        al_get_bitmap_width(img),
+        al_get_bitmap_height(img),
+        0, 0,
+        largura, altura,
+        0);
+}
+
+// Escolhe qual desenho do personagem aparece neste momento
+static ALLEGRO_BITMAP *escolhe_sprite(
+    ALLEGRO_BITMAP *sprites[],
+    bool andando,
+    bool virado_esquerda,
+    int frame_anim,
+    int escada_estado)
+{
+    // Subindo a escada: de costas
+    if (escada_estado == 1)
+    {
+        return sprites[SPRITE_COSTAS];
+    }
+
+    // Descendo a escada: de frente
+    if (escada_estado == 2)
+    {
+        return sprites[SPRITE_FRENTE];
+    }
+
+    // Andando: ciclo de desenhos do lado para onde o personagem vai
+    if (andando)
+    {
+        int primeiro = virado_esquerda ? SPRITE_ESQUERDA : SPRITE_DIREITA;
+        return sprites[primeiro + frame_anim];
+    }
+
+    // Parado: de frente
+    return sprites[SPRITE_FRENTE];
+}
+
+// Desenha o personagem (com fade opcional, usado na floresta).
+//
+// (x, y) e "tamanho" continuam sendo a caixa de colisao do personagem.
+// O desenho (tam_sprite) pode ser bem maior que essa caixa: ele fica
+// centralizado na caixa e com os pes na parte de baixo dela, assim a
+// colisao, as zonas de interacao e a escada nao mudam.
+static void desenha_personagem(
+    ALLEGRO_BITMAP *sprite,
+    float x, float y,
+    float tamanho,
+    float tam_sprite,
+    float alfa)
+{
+    float dx = x + (tamanho - tam_sprite) / 2.0f;
+
+    // Os desenhos tem uma margem vazia embaixo dos pes; descontamos essa
+    // margem para os pes ficarem exatamente na base da caixa de colisao
+    float dy = y + tamanho - tam_sprite * (1.0f - MARGEM_INFERIOR_SPRITE);
+
+    al_draw_tinted_scaled_bitmap(
+        sprite,
+        al_map_rgba_f(alfa, alfa, alfa, alfa),
+        0, 0,
+        al_get_bitmap_width(sprite),
+        al_get_bitmap_height(sprite),
+        dx, dy,
+        tam_sprite, tam_sprite,
+        0);
+}
+
+// Avanca a animacao de andar (chamada uma vez por tick)
+static void atualiza_animacao(bool andando, int *frame_anim, int *contador_anim)
+{
+    if (andando)
+    {
+        (*contador_anim)++;
+
+        if (*contador_anim >= TICKS_POR_FRAME_ANIM)
+        {
+            *contador_anim = 0;
+            *frame_anim = (*frame_anim + 1) % TOTAL_FRAMES_ANDAR;
+        }
+    }
+    else
+    {
+        // Parou: volta ao primeiro desenho do ciclo
+        *frame_anim = 0;
+        *contador_anim = 0;
+    }
+}
 
 // Desenha um coracao pequeno (vidas no canto da tela)
 static void desenha_coracao(float x, float y, float e, ALLEGRO_COLOR cor)
@@ -205,9 +351,21 @@ int main(void)
         return 1;
     }
 
+    // Carrega a imagem da sala 1 depois do primeiro quiz acertado (salao sujo)
+    ALLEGRO_BITMAP *imagem_sala1_suja =
+        al_load_bitmap("img/bibliotecaSuja.png");
+
+    if (!imagem_sala1_suja)
+    {
+        printf("Erro ao carregar a imagem da sala 1 (suja)!\n");
+        al_destroy_bitmap(imagem_sala1);
+        al_destroy_display(janela);
+        return 1;
+    }
+
     // Carrega a imagem da sala 2
     ALLEGRO_BITMAP *imagem_sala2 =
-        al_load_bitmap("img/bibliotecaDestruida1.png");
+        al_load_bitmap("img/bibliotecaSala2.png");
 
     if (!imagem_sala2)
     {
@@ -217,9 +375,9 @@ int main(void)
         return 1;
     }
 
-    // imagem da sala 3
+    // imagem da sala 3 (escritorio)
     ALLEGRO_BITMAP *imagem_sala3 =
-        al_load_bitmap("img/bibliotecaSuja.png");
+        al_load_bitmap("img/bibliotecaEscritorio.png");
     if (!imagem_sala3)
     {
         printf("Erro ao carregar a imagem da sala 3!\n");
@@ -245,6 +403,43 @@ int main(void)
     {
         printf("Erro ao carregar a imagem da biblioteca reconstruida!\n");
         return 1;
+    }
+
+    // Os 3 cenarios do salao da sala 1, do mais destruido ao restaurado:
+    //   0 = bibliotecaDestruida2.png (comeco do jogo)
+    //   1 = bibliotecaSuja.png       (depois do 1o quiz acertado)
+    //   2 = biblioteca.png           (depois do 2o quiz acertado)
+    ALLEGRO_BITMAP *fundo_sala1[3] = {
+        imagem_sala1,
+        imagem_sala1_suja,
+        imagem_vitoria};
+
+    // carregar imagens do envelope, da carta e da floresta
+    ALLEGRO_BITMAP *imagem_envelope =
+        al_load_bitmap("img/envelope.jpg");
+    ALLEGRO_BITMAP *imagem_carta =
+        al_load_bitmap("img/carta.png");
+    ALLEGRO_BITMAP *imagem_floresta =
+        al_load_bitmap("img/floresta.jpg");
+
+    if (!imagem_envelope || !imagem_carta || !imagem_floresta)
+    {
+        printf("Erro ao carregar as imagens do envelope, da carta ou da floresta!\n");
+        return 1;
+    }
+
+    // carregar os 8 desenhos do personagem (nomes em ARQUIVOS_SPRITES)
+    ALLEGRO_BITMAP *sprites[TOTAL_SPRITES];
+
+    for (int i = 0; i < TOTAL_SPRITES; i++)
+    {
+        sprites[i] = al_load_bitmap(ARQUIVOS_SPRITES[i]);
+
+        if (!sprites[i])
+        {
+            printf("Erro ao carregar o desenho do personagem: %s\n", ARQUIVOS_SPRITES[i]);
+            return 1;
+        }
     }
 
     // Cria a fonte
@@ -309,19 +504,34 @@ int main(void)
 
     // ---------------- PERSONAGEM ----------------
 
+    // Caixa de colisao do personagem (usada nas zonas, limites e escada)
     float tamanho = ES(50);
+
+    // Tamanho do DESENHO do personagem na tela (proporcional ao cenario).
+    // 0.38 = o quadro de 64x64 do desenho ocupa 38% da altura da tela
+    // (a menina em si fica com cerca de 29% da altura, uns 3/5 da altura das portas).
+    // Para aumentar ou diminuir o boneco, mude apenas este numero
+    // (ex: 0.28 menor, 0.36 maior).
+    const float tam_sprite = altura_tela * 0.38f;
+
     float velo = PX(5);
 
     // Posicao fixa no eixo y (o personagem so se move no eixo x)
     // Andar de baixo (chao)
-    const float Y_INICIAL = PY(500);
+    const float Y_INICIAL = PY(530);
 
-    // Andar de cima (varanda da sala 1). Se o quadrado ficar acima ou
+    // Andar de cima (varanda da sala 1). Se o personagem ficar acima ou
     // abaixo do piso da varanda, ajuste apenas este valor.
     const float Y_CIMA = PY(160);
 
     float x = PX(100);
     float y = Y_INICIAL;
+
+    // Controle da animacao do personagem
+    bool andando = false;         // true enquanto uma seta esquerda/direita esta apertada
+    bool virado_esquerda = false; // para qual lado o personagem esta olhando
+    int frame_anim = 0;           // qual desenho do ciclo de andar esta na tela
+    int contador_anim = 0;        // conta ticks para trocar de desenho
 
     // ---------------- ESCADA (SALA 1) ----------------
 
@@ -356,6 +566,13 @@ int main(void)
     float margem_entrada = PX(10);
     int vidas = 3;
 
+    // Restauracao do salao da sala 1 (0, 1 ou 2, veja "fundo_sala1").
+    // A troca de cenario acontece com um fade de 1 segundo:
+    // "estagio_anterior" fica por baixo e "estagio_salao" aparece por cima.
+    int estagio_salao = 0;
+    int estagio_anterior = 0;
+    float alfa_estagio = 1.0f; // 1.0 = troca concluida
+
     // Zona de interacao do bau alinhada ao chao do andar de baixo
     float zona_x = PX(700);
     float zona_y = PY(495);
@@ -363,10 +580,10 @@ int main(void)
     float zona_altura = PY(55);
 
     bool esta_na_zona = false;
-    // Zona de interacao da Sala 2 (onde esta o livro sobre a mesa)
-    float zona2_x = PX(500);
+    // Zona de interacao da Sala 2 (onde estao os livros sobre a mesa do centro)
+    float zona2_x = PX(300);
     float zona2_y = PY(450);
-    float zona2_largura = PX(100);
+    float zona2_largura = PX(230);
     float zona2_altura = PY(80);
 
     bool esta_na_zona_sala2 = false;
@@ -377,10 +594,10 @@ int main(void)
     float zona3_altura = PY(80);
     bool esta_na_zona_sala2_3 = false;
 
-    // zona de interação da luz na Sala 3
-    float zona4_x = PX(350);
+    // zona de interação da luz na Sala 3 (luminaria verde sobre a mesa do escritorio)
+    float zona4_x = PX(400);
     float zona4_y = PY(420);
-    float zona4_largura = PX(80);
+    float zona4_largura = PX(120);
     float zona4_altura = PY(100);
 
     bool esta_na_zona_sala3_luz = false;
@@ -457,6 +674,26 @@ int main(void)
     int frames_tremor = 0;   // frames restantes do tremor (0 = sem tremor)
     bool ultima_resposta_correta = false;
 
+    // ---------------- ENVELOPE / CARTA / FLORESTA ----------------
+
+    float alfa_envelope = 0.0f;
+    float alfa_carta = 0.0f;
+    bool carta_abrindo = false; // true depois do clique no envelope
+    float alfa_floresta = 0.0f;
+
+    // Velocidade dos fades: 1 segundo para ir de 0 a 1
+    const float passo_fade = 1.0f / FPS;
+
+    // Altura do personagem no caminho de terra da floresta.
+    // Se ele ficar acima ou abaixo do caminho, ajuste o 0.76f.
+    const float Y_FLORESTA = altura_tela * 0.76f;
+
+    // A porta fica no lado direito da floresta: a partir desta posicao
+    // o jogador pode interagir. Se a mensagem aparecer cedo ou tarde
+    // demais, ajuste o 0.86f.
+    float porta_x = largura_tela * 0.86f;
+    bool esta_na_porta = false;
+
     // ---------------- ESTADOS DO JOGO ----------------
 
     EstadoJogo estado_atual = ESTADO_MENU;
@@ -515,12 +752,70 @@ int main(void)
 
                 if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_SPACE)
                 {
-                    estado_atual = ESTADO_JOGANDO;
+                    estado_atual = ESTADO_ENVELOPE;
+                    alfa_envelope = 0.0f;
+                    alfa_carta = 0.0f;
+                    carta_abrindo = false;
                 }
 
                 if (tecla == ALLEGRO_KEY_ESCAPE)
                 {
                     rodando = false;
+                }
+            }
+
+            // Na tela do envelope e da carta
+            else if (estado_atual == ESTADO_ENVELOPE)
+            {
+
+                if (tecla == ALLEGRO_KEY_ESCAPE)
+                {
+                    rodando = false;
+                }
+
+                else if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_SPACE)
+                {
+                    // Primeiro clique: abre o envelope (a carta aparece com fade)
+                    if (!carta_abrindo && alfa_envelope >= 1.0f)
+                    {
+                        carta_abrindo = true;
+                    }
+
+                    // Segundo clique: vai para a floresta
+                    else if (carta_abrindo && alfa_carta >= 1.0f)
+                    {
+                        estado_atual = ESTADO_FLORESTA;
+                        x = PX(40);
+                        y = Y_FLORESTA;
+                        alfa_floresta = 0.0f;
+                        esta_na_porta = false;
+                        virado_esquerda = false;
+                    }
+                }
+            }
+
+            // Na floresta
+            else if (estado_atual == ESTADO_FLORESTA)
+            {
+
+                if (tecla == ALLEGRO_KEY_ESCAPE)
+                {
+                    rodando = false;
+                }
+
+                else if (
+                    tecla == ALLEGRO_KEY_E &&
+                    esta_na_porta &&
+                    alfa_floresta >= 1.0f)
+                {
+                    // Destranca a porta e entra na biblioteca
+                    estado_atual = ESTADO_JOGANDO;
+                    sala_atual = 1;
+                    x = PX(100);
+                    y = Y_INICIAL;
+                    andar_cima = false;
+                    escada_estado = 0;
+                    virado_esquerda = false;
                 }
             }
 
@@ -534,6 +829,7 @@ int main(void)
                     sala_atual = 1;
                     x = PX(100);
                     y = Y_INICIAL;
+                    virado_esquerda = false;
 
                     // Volta para o andar de baixo e zera os quizzes resolvidos
                     andar_cima = false;
@@ -710,6 +1006,8 @@ int main(void)
                     evento.mouse.y <= botao_y2)
                 {
                     estado_atual = ESTADO_HISTORIA;
+                    caracteres_visiveis = 0; // restar o texto
+                    contador_frames = 0;     // resetar o contador de frames
                 }
             }
 
@@ -717,7 +1015,33 @@ int main(void)
             {
                 if (evento.mouse.button == 1)
                 {
-                    estado_atual = ESTADO_JOGANDO;
+                    estado_atual = ESTADO_ENVELOPE;
+                    alfa_envelope = 0.0f;
+                    alfa_carta = 0.0f;
+                    carta_abrindo = false;
+                }
+            }
+
+            else if (estado_atual == ESTADO_ENVELOPE)
+            {
+                if (evento.mouse.button == 1)
+                {
+                    // Primeiro clique: abre o envelope (a carta aparece com fade)
+                    if (!carta_abrindo && alfa_envelope >= 1.0f)
+                    {
+                        carta_abrindo = true;
+                    }
+
+                    // Segundo clique: vai para a floresta
+                    else if (carta_abrindo && alfa_carta >= 1.0f)
+                    {
+                        estado_atual = ESTADO_FLORESTA;
+                        x = PX(40);
+                        y = Y_FLORESTA;
+                        alfa_floresta = 0.0f;
+                        esta_na_porta = false;
+                        virado_esquerda = false;
+                    }
                 }
             }
         }
@@ -870,6 +1194,137 @@ int main(void)
                     ALLEGRO_ALIGN_CENTRE,
                     "Pressione ENTER, ESPACO ou clique para continuar");
             }
+
+            // ---------------- ENVELOPE E CARTA ----------------
+            else if (estado_atual == ESTADO_ENVELOPE)
+            {
+                // O envelope aparece com fade in
+                if (alfa_envelope < 1.0f)
+                {
+                    alfa_envelope += passo_fade;
+                    if (alfa_envelope > 1.0f)
+                    {
+                        alfa_envelope = 1.0f;
+                    }
+                }
+
+                // Depois do clique, a carta aparece por cima com fade in
+                if (carta_abrindo && alfa_carta < 1.0f)
+                {
+                    alfa_carta += passo_fade;
+                    if (alfa_carta > 1.0f)
+                    {
+                        alfa_carta = 1.0f;
+                    }
+                }
+
+                al_clear_to_color(al_map_rgb(0, 0, 0));
+
+                desenha_imagem_tela(imagem_envelope, alfa_envelope, largura_tela, altura_tela);
+
+                if (carta_abrindo)
+                {
+                    desenha_imagem_tela(imagem_carta, alfa_carta, largura_tela, altura_tela);
+                }
+
+                if (!carta_abrindo && alfa_envelope >= 1.0f)
+                {
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        largura_tela / 2, PY(560),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "Clique para abrir o envelope");
+                }
+                else if (alfa_carta >= 1.0f)
+                {
+                    TEXTO(
+                        al_map_rgb(255, 255, 255),
+                        largura_tela / 2, PY(560),
+                        ALLEGRO_ALIGN_CENTRE,
+                        "Clique para continuar");
+                }
+            }
+
+            // ---------------- FLORESTA ----------------
+            else if (estado_atual == ESTADO_FLORESTA)
+            {
+                // A floresta aparece com fade in
+                if (alfa_floresta < 1.0f)
+                {
+                    alfa_floresta += passo_fade;
+                    if (alfa_floresta > 1.0f)
+                    {
+                        alfa_floresta = 1.0f;
+                    }
+                }
+
+                ALLEGRO_KEYBOARD_STATE key_state;
+                al_get_keyboard_state(&key_state);
+
+                andando = false;
+
+                if (al_key_down(&key_state, ALLEGRO_KEY_LEFT))
+                {
+                    x -= velo;
+                    virado_esquerda = true;
+                    andando = true;
+
+                    if (x < 0)
+                    {
+                        x = 0;
+                    }
+                }
+
+                if (al_key_down(&key_state, ALLEGRO_KEY_RIGHT))
+                {
+                    x += velo;
+                    virado_esquerda = false;
+                    andando = true;
+
+                    if (x > largura_tela - tamanho)
+                    {
+                        x = largura_tela - tamanho;
+                    }
+                }
+
+                atualiza_animacao(andando, &frame_anim, &contador_anim);
+
+                // Esta perto da porta?
+                esta_na_porta = (x + tamanho > porta_x);
+
+                al_clear_to_color(al_map_rgb(0, 0, 0));
+
+                desenha_imagem_tela(imagem_floresta, alfa_floresta, largura_tela, altura_tela);
+
+                // Personagem (com o mesmo fade da cena)
+                desenha_personagem(
+                    escolhe_sprite(sprites, andando, virado_esquerda, frame_anim, 0),
+                    x, y,
+                    tamanho,
+                    tam_sprite,
+                    alfa_floresta);
+
+                if (alfa_floresta >= 1.0f)
+                {
+                    if (esta_na_porta)
+                    {
+                        TEXTO(
+                            al_map_rgb(255, 255, 255),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Pressione [E] para destrancar a porta e entrar");
+                    }
+                    else
+                    {
+                        TEXTO(
+                            al_map_rgb(200, 200, 200),
+                            largura_tela / 2, PY(50),
+                            ALLEGRO_ALIGN_CENTRE,
+                            "Caminhe com as SETAS ate a porta da biblioteca");
+                    }
+                }
+            }
+
             // ---------------- TELA DE GAME OVER ----------------
             else if (estado_atual == game_over)
             {
@@ -1055,6 +1510,9 @@ int main(void)
                 bool sala1_desbloqueou_sala2 = quiz_resolvido[1] || quiz_resolvido[5];
                 bool sala2_desbloqueou_sala3 = quiz_resolvido[2] || quiz_resolvido[3];
 
+                // A cada tick comeca considerando que o personagem esta parado
+                andando = false;
+
                 // Movimento do personagem
                 if (!quiz_aberto)
                 {
@@ -1094,6 +1552,8 @@ int main(void)
                         if (al_key_down(&key_state, ALLEGRO_KEY_LEFT))
                         {
                             x -= velo;
+                            virado_esquerda = true;
+                            andando = true;
 
                             if (x < 0)
                             {
@@ -1104,6 +1564,8 @@ int main(void)
                         if (al_key_down(&key_state, ALLEGRO_KEY_RIGHT))
                         {
                             x += velo;
+                            virado_esquerda = false;
+                            andando = true;
 
                             if (x > limite_direito)
                             {
@@ -1164,6 +1626,9 @@ int main(void)
                     }
                 }
 
+                // Avanca a animacao de andar do personagem
+                atualiza_animacao(andando, &frame_anim, &contador_anim);
+
                 // Verifica se o personagem esta na borda bloqueada da Sala 1 ou Sala 2
                 passagem_sala2_bloqueada = (sala_atual == 1 &&
                                             !andar_cima &&
@@ -1192,49 +1657,35 @@ int main(void)
                                 !andar_cima &&
                                 escada_estado == 0 &&
                                 x < zona_x + zona_largura &&
-                                x + tamanho > zona_x &&
-                                y < zona_y + zona_altura &&
-                                y + tamanho > zona_y);
+                                x + tamanho > zona_x);
 
                 // Verifica colisao com a estante da varanda (so la em cima)
                 esta_na_zona_estante = (sala_atual == 1 &&
                                         andar_cima &&
                                         escada_estado == 0 &&
                                         x < zona5_x + zona5_largura &&
-                                        x + tamanho > zona5_x &&
-                                        y < zona5_y + zona5_altura &&
-                                        y + tamanho > zona5_y);
+                                        x + tamanho > zona5_x);
 
                 // Verifica colisao com a zona da Sala 2
                 esta_na_zona_sala2 = (sala_atual == 2 &&
+                                      !andar_cima &&
                                       x < zona2_x + zona2_largura &&
-                                      x + tamanho > zona2_x &&
-                                      y < zona2_y + zona2_altura &&
-                                      y + tamanho > zona2_y);
+                                      x + tamanho > zona2_x);
                 esta_na_zona_sala2_3 = (sala_atual == 2 &&
+                                        !andar_cima &&
                                         x < zona3_x + zona3_largura &&
-                                        x + tamanho > zona3_x &&
-                                        y < zona3_y + zona3_altura &&
-                                        y + tamanho > zona3_y);
+                                        x + tamanho > zona3_x);
                 esta_na_zona_sala3_luz = (sala_atual == 3 &&
+                                          !andar_cima &&
                                           x < zona4_x + zona4_largura &&
-                                          x + tamanho > zona4_x &&
-                                          y < zona4_y + zona4_altura &&
-                                          y + tamanho > zona4_y);
+                                          x + tamanho > zona4_x);
 
-                // Desenha o fundo
+                // Desenha o fundo da sala 1 restaurado apos acertar o primeiro quiz.
                 if (sala_atual == 1)
                 {
-
-                    al_draw_scaled_bitmap(
-                        imagem_sala1,
-                        0, 0,
-                        al_get_bitmap_width(imagem_sala1),
-                        al_get_bitmap_height(imagem_sala1),
-                        0, 0,
-                        largura_tela,
-                        altura_tela,
-                        0);
+                    ALLEGRO_BITMAP *fundo_atual = quiz_resolvido[1]
+                        ? imagem_vitoria : imagem_sala1;
+                    desenha_imagem_tela(fundo_atual, 1.0f, largura_tela, altura_tela);
                 }
 
                 else if (sala_atual == 2)
@@ -1269,11 +1720,12 @@ int main(void)
                 }
 
                 // Desenha o personagem
-                al_draw_filled_rectangle(
+                desenha_personagem(
+                    escolhe_sprite(sprites, andando, virado_esquerda, frame_anim, escada_estado),
                     x, y,
-                    x + tamanho,
-                    y + tamanho,
-                    al_map_rgb(200, 200, 0));
+                    tamanho,
+                    tam_sprite,
+                    1.0f);
 
                 // Mensagens no topo da tela
                 if (!quiz_aberto)
@@ -1669,7 +2121,15 @@ int main(void)
 
     // ---------------- LIBERAR MEMORIA ----------------
 
+    for (int i = 0; i < TOTAL_SPRITES; i++)
+    {
+        al_destroy_bitmap(sprites[i]);
+    }
+
     al_destroy_font(fonte);
+    al_destroy_bitmap(imagem_floresta);
+    al_destroy_bitmap(imagem_carta);
+    al_destroy_bitmap(imagem_envelope);
     al_destroy_bitmap(imagem_sala2);
     al_destroy_bitmap(imagem_sala1);
     al_destroy_bitmap(imagem_sala3);
