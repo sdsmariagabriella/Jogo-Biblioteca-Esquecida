@@ -27,3 +27,7 @@ Tela quando vence!
 Tela quando morre!
 <img width="1277" height="718" alt="Captura de tela 2026-11-27 123301" src="https://github.com/user-attachments/assets/e11710b0-0b28-4df6-8396-98d6d752d309" />
 
+trello 
+
+<img width="1909" height="804" alt="Captura de tela 2026-11-27 232542" src="https://github.com/user-attachments/assets/20be5a79-d59a-4025-bcc9-c83ff4f2965f" />
+<img width="1909" height="804" alt="Captura de tela 2026-11-27 232542" src="https://github.com/user-attachments/assets/91de8055-34ef-4916-aef3-ba05cc45ac09" />
